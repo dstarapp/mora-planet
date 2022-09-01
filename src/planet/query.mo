@@ -1,11 +1,16 @@
 
+import Ulid "mo:ulid/ULID";
 import Types "./types";
 
 module {
 
+  type PermissionType = Types.PermissionType;
+  type SubcribeType = Types.SubcribeType;
   type ArticleType = Types.ArticleType;
   type ArticleStatus = Types.ArticleStatus;
   type CommentStatus = Types.CommentStatus;
+  type SubcribePrice = Types.SubcribePrice;
+  type Subcriber = Types.Subcriber;
   type Category = Types.Category;
   type Article = Types.Article;
   type Comment = Types.Comment;
@@ -16,13 +21,57 @@ module {
     children: [QueryCategory];
   };
 
+  public type QuerySubcriber = {
+    pid : Principal;
+    subType: SubcribeType;
+    expireTime: Int;
+  };
+
   public type OpResult = {
-    #Ok: { id : Nat; };
+    #Ok: { data : Text; };
     #Err: Text;
   };
 
+  public type PlanetBase = {
+    owner: Principal;
+    writers: [Principal];
+    name: Text;
+    avatar: Text;
+    cover: Text;
+    twitter: Text;
+    desc: Text;
+    created: Int;
+    subprices: [SubcribePrice];
+    subcriber: Nat;
+    subcribers: [QuerySubcriber];
+    article: Nat;
+    income: Nat64;
+    canister: Principal;
+    url: Text;
+  };
+
+  public type PlanetInfo = {
+    owner: Principal;
+    permission: PermissionType;
+    payee: ?Blob;
+    name: Text;
+    avatar: Text;
+    cover: Text;
+    twitter: Text;
+    desc: Text;
+    created: Int;
+    writers: [Principal];
+    subprices: [SubcribePrice];
+    subcriber: Nat;
+    article: Nat;
+    income: Nat64;
+    canister: Principal;
+    memory: Nat;
+    url: Text;
+  };
+
   public type ArticleArgs = {
-    id: Nat;
+    id: Text;
     atype: ArticleType;
     title: Text;
     thumb: Text;
@@ -37,7 +86,7 @@ module {
   };
 
   public type QueryArticle = {
-    id: Nat;
+    id: Text;
     atype: ArticleType;
     title: Text;
     thumb: Text;
@@ -52,7 +101,7 @@ module {
     allowComment: Bool;
     like: Nat;
     unlike: Nat;
-    view: Nat;
+    view: Nat64;
     tags: [Text];
     copyright: ?Text;
   };
@@ -85,7 +134,7 @@ module {
 
   public type QueryComment = {
     id: Nat;
-    aid: Nat;
+    aid: Text;
     pid: Principal;
     content: Text;
     like: Nat;
@@ -94,9 +143,17 @@ module {
     child: ?QueryComment;
   };
 
+  public func toQuerySubcriber(p: Subcriber): QuerySubcriber {
+    {
+      pid = p.pid;
+      subType = p.subType;
+      expireTime = p.expireTime / 1_000_000;
+    }
+  };
+
   public func toQueryArticle(p: Article): QueryArticle {
     {
-      id = p.id;
+      id = Ulid.toText(p.id);
       atype = p.atype;
       author = p.author;
       title = p.title;
@@ -120,7 +177,7 @@ module {
   public func toQueryComment(p: Comment): QueryComment {
     {
       id = p.id;
-      aid = p.aid;
+      aid = Ulid.toText(p.aid);
       pid = p.pid;
       content = p.content;
       like = p.like;
@@ -133,7 +190,7 @@ module {
   public func toQueryCommentWith(p: Comment, child: Comment): QueryComment {
     {
       id = p.id;
-      aid = p.aid;
+      aid = Ulid.toText(p.aid);
       pid = p.pid;
       content = p.content;
       like = p.like;

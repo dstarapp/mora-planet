@@ -5,35 +5,14 @@ import Buffer "mo:base/Buffer";
 import Hash "mo:base/Hash";
 import Text "mo:base/Text";
 import Nat64 "mo:base/Nat64";
+import Ulid "mo:ulid/ULID";
 
 module {
 
-  public type PlanetInfo = {
-    owner: Principal;
-    name: Text;
-    avatar: Text;
-    twitter: Text;
-    desc: Text;
-    created: Time.Time;
-    writers: [Principal];
-    subprices: [SubcribePrice];
-    subcriber: Nat;
-    article: Nat;
-    canister: Principal;
-    url: Text;
-  };
-
-  public type PlanetBase = {
-    name: Text;
-    avatar: Text;
-    twitter: Text;
-    desc: Text;
-    created: Time.Time;
-    subprices: [SubcribePrice];
-    subcriber: Nat;
-    article: Nat;
-    canister: Principal;
-    url: Text;
+  public type PermissionType = {
+    #OWNER;
+    #WRITER;
+    #NONE;
   };
 
   public type SubcribeType = {
@@ -80,7 +59,7 @@ module {
   };
 
   public type Article = {
-    id: Nat;
+    id: Ulid.ULID;
     atype: ArticleType;
     var title: Text;
     var thumb: Text;
@@ -96,7 +75,7 @@ module {
     var allowComment: Bool;
     var like: Nat;
     var unlike: Nat;
-    var view: Nat;
+    var view: Nat64;
     var tags: [Text];
     var version: Nat;
     var copyright: ?Text;
@@ -109,7 +88,7 @@ module {
 
   public type Comment = {
     id: Nat;
-    aid: Nat;
+    aid: Ulid.ULID;
     pid: Principal;
     content: Text;
     var like: Nat;

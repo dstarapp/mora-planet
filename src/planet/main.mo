@@ -19,19 +19,22 @@ import Text "mo:base/Text";
 import Time "mo:base/Time";
 import Trie "mo:base/Trie";
 import TrieMap "mo:base/TrieMap";
+import Ulid "mo:ulid/ULID";
+import Source "mo:ulid/Source";
+import XorShift "mo:rand/XorShift";
 import Types "./types";
 import Util "./utils/Util";
 
 shared({caller}) actor class Planet(
   _owner : Principal,
   _name: Text,
+  _avatar: Text,
   _desc: Text,
-  _payee: Ledger.AccountIdentifier,
   _agree: Ledger.AccountIdentifier,
   ) = this {
+
+  type PermissionType = Types.PermissionType;
   type SubcribePrice = Types.SubcribePrice;
-  type PlanetInfo = Types.PlanetInfo;
-  type PlanetBase = Types.PlanetBase;
   type Category = Types.Category;
   type Article = Types.Article;
   type Comment = Types.Comment;
@@ -41,23 +44,27 @@ shared({caller}) actor class Planet(
   type PayType = Types.PayType;
   type ArgeeSharePay = Types.ArgeeSharePay;
 
+  type PlanetInfo = Query.PlanetInfo;
+  type PlanetBase = Query.PlanetBase;
   type OpResult = Query.OpResult;
   type ArticleArgs = Query.ArticleArgs;
   type CommentArgs = Query.CommentArgs;
+  type QuerySubcriber = Query.QuerySubcriber;
   type QueryCategory = Query.QueryCategory;
   type QueryArticle = Query.QueryArticle;
   type QueryArticleReq = Query.QueryArticleReq;
   type QueryArticleResp = Query.QueryArticleResp;
 
-
   type DQueue<T> = DQueue.DQueue<T>;
 
   private stable var owner: Principal = _owner;
   private stable var name: Text = _name;
-  private stable var avatar: Text = "";
+  private stable var avatar: Text = _avatar;
   private stable var twitter: Text = "";
   private stable var desc: Text = _desc;
-  private stable var payee:  Ledger.AccountIdentifier = _payee;
+  private stable var cover: Text = "";
+  private stable var totalIncome: Nat64 = 0;
+  private stable var payee: ?Ledger.AccountIdentifier = null;
   private stable var argeePayee: ArgeeSharePay = { ratio = 10; to = _agree; remark = "AGREEMENT"};
   private stable var created : Time.Time = Time.now();
   private stable var writers : [Principal] = [];
@@ -65,13 +72,14 @@ shared({caller}) actor class Planet(
   private stable var categorys : [Category] = [];
   private stable var customurl: Text = "";
   private stable var cateindex : Nat = 0;
-  private stable var articleindex: Nat = 0;
   private stable var commentindex: Nat = 0;
   private stable var payindex = Prim.intToNat64Wrap(Time.now());
   private stable var articles: DQueue<Article> = DQueue.empty();
   private stable var comments: DQueue<Comment> = DQueue.empty();
   private stable var subcribers: DQueue<Subcriber> = DQueue.empty();
   private stable var allTxs: DQueue<PayOrder> = DQueue.empty();
+
+  // private stable var articleindex: Nat = 0;
 
   // for sub comment hashmap, need stable
   private var comments_map : TrieMap.TrieMap<Nat, Nat> = TrieMap.TrieMap<Nat, Nat>(Nat.equal, Hash.hash);
@@ -80,6 +88,8 @@ shared({caller}) actor class Planet(
   // private var allTxs = TrieMap.TrieMap<Nat64, PayOrder>( Nat64.equal, Types.nat64hash);
 
   // private var test1 : Trie.Trie()
+  private let xorr = XorShift.toReader(XorShift.XorShift64(null));
+  private let ulse = Source.Source(xorr, 0);
   private let ledger : Ledger.Self = actor(Config.LEDGER_CANISTER_ID);
   private let FEE : Nat64 = 10000;
 
@@ -114,73 +124,101 @@ shared({caller}) actor class Planet(
   // };
 
   // Returns the default account identifier of this canister.
+  public query func canisterMemory() : async Nat {
+    return Prim.rts_memory_size();
+  };
+
+  // Returns the default account identifier of this canister.
   public query func canisterAccount() : async Ledger.AccountIdentifier {
     accountId(null);
   };
 
-  // Returns the balnace of this canister.
+  // Returns the balance of this canister.
   public shared({ caller }) func canisterBalance() : async Ledger.Tokens {
     // assert()
     await ledger.account_balance({ account = accountId(null) })
   };
 
-  public func queryBlock(height: Nat64) : async [Nat] {
-    // assert()
-    // await ledger.query_blocks({ start = height; length = 1});
-    // let q : DQueue<Nat> = DQueue.empty();
-    // ignore DQueue.pushBack(q, 1);
-    // ignore DQueue.pushBack(q, 2);
-    // ignore DQueue.pushBack(q, 3);
-    // ignore DQueue.pushBack(q, 4);
-    // ignore DQueue.pushFront(5, q);
-    // ignore DQueue.pushFront(6, q);
-    // ignore DQueue.pushFront(7, q);
+  // public func testArticleId() : async Text {
+  //   return Ulid.toText(ulse.new());
+  // };
+  // public func queryBlock(height: Nat64) : async [Nat] {
+  //   // assert()
+  //   // await ledger.query_blocks({ start = height; length = 1});
+  //   // let q : DQueue<Nat> = DQueue.empty();
+  //   // ignore DQueue.pushBack(q, 1);
+  //   // ignore DQueue.pushBack(q, 2);
+  //   // ignore DQueue.pushBack(q, 3);
+  //   // ignore DQueue.pushBack(q, 4);
+  //   // ignore DQueue.pushFront(5, q);
+  //   // ignore DQueue.pushFront(6, q);
+  //   // ignore DQueue.pushFront(7, q);
 
-    // ignore DQueue.remove(q, func (v : Nat) : Bool { v == 3; });
+  //   // ignore DQueue.remove(q, func (v : Nat) : Bool { v == 3; });
 
-    // let x = Buffer.Buffer<Nat>(0);
-    // for(v1 in DQueue.toReverseIter(q)) {
-    //   x.add(v1);
-    // };
-    // return x.toArray();
-    return [];
-  };
+  //   // let x = Buffer.Buffer<Nat>(0);
+  //   // for(v1 in DQueue.toReverseIter(q)) {
+  //   //   x.add(v1);
+  //   // };
+  //   // return x.toArray();
+  //   return [];
+  // };
 
   public query({caller}) func getPlanetBase(): async PlanetBase {
-      return {
-          name = name;
-          avatar = avatar;
-          twitter = twitter;
-          desc = desc;
-          created = created;
-          subprices = subprices;
-          subcriber = DQueue.size(subcribers);
-          article = DQueue.size(articles);
-          canister = Principal.fromActor(this);
-          url = customurl;
+    var topsubcribers = Buffer.Buffer<QuerySubcriber>(0);
+    var count = 0;
+    label top for (s in DQueue.toReverseIter(subcribers)) {
+      if (count >= 10) {
+        break top;
       };
+      count := count + 1;
+      topsubcribers.add(Query.toQuerySubcriber(s));
+    };
+
+    return {
+        owner = owner;
+        writers = writers;
+        name = name;
+        avatar = avatar;
+        cover = cover;
+        twitter = twitter;
+        desc = desc;
+        created = created / 1_000_000;
+        subprices = subprices;
+        subcribers = topsubcribers.toArray();
+        subcriber = DQueue.size(subcribers);
+        article = DQueue.size(articles);
+        income = totalIncome;
+        canister = Principal.fromActor(this);
+        url = customurl;
+    };
   };
 
   public query({caller}) func getPlanetInfo(): async PlanetInfo {
-      // assert(checkPoster(caller)); //
+      assert(checkPoster(caller)); //
       return {
           owner = owner;
+          permission = permissionType(caller);
+          payee = payee;
           name = name;
           avatar = avatar;
+          cover = cover;
           twitter = twitter;
           desc = desc;
-          created = created;
+          created = created / 1_000_000;
           writers = writers;
           subprices = subprices;
           subcriber = DQueue.size(subcribers);
           article = DQueue.size(articles);
+          income = totalIncome;
           canister = Principal.fromActor(this);
+          memory = Prim.rts_memory_size();
           url = customurl;
       };
   };
 
   public query({caller}) func adminArticles(req: QueryArticleReq) : async QueryArticleResp {
-    // assert(checkPoster(caller)); //
+    assert(checkPoster(caller)); //
     let res = limitAdminArticle(caller, req);
     let data = Buffer.Buffer<QueryArticle>(res.2.size());
 
@@ -194,6 +232,23 @@ shared({caller}) actor class Planet(
       hasmore = res.1;
       data = data.toArray();
     };
+  };
+
+  public query({caller}) func adminContent(aid: Text) : async OpResult {
+    switch(findArticle(aid)) {
+      case(?article) {
+        if (not checkOwner(caller)) {
+          // only return self created
+          if (not Principal.equal(article.author, caller)) {
+            return #Err("no permission to read this article!");
+          };
+        };
+        return #Ok({data = article.content});
+      };
+      case(_) {
+        return #Err("article not exist!");
+      };
+    }
   };
 
   public query({caller}) func queryArticles(req: QueryArticleReq) : async QueryArticleResp {
@@ -212,28 +267,72 @@ shared({caller}) actor class Planet(
     };
   };
 
+  public query({caller}) func queryContent(aid: Text) : async OpResult {
+    switch(findArticle(aid)) {
+      case(?article) {
+        if (article.status == #Draft or article.status == #Private) {
+          return #Err("no permission to read this article!");
+        };
+        let issubcriber = checkSubcriber(caller);
+        // subcribe also return list, but not allow read content
+        if (not issubcriber and article.status == #Subcribe) {
+          return #Err("no permission to read this article!");
+        };
+        return #Ok({data = article.content});
+      };
+      case(_) {
+        return #Err("article not exist!");
+      };
+    }
+  };
+
   public shared({ caller }) func setWriters(writer :[Principal]): async Bool {
-      // assert(caller == owner);
+      assert(caller == owner);
       writers := writers;
       return true;
   };
 
   public shared({ caller }) func setName(p: Text) : async Bool {
-      // assert(caller == owner);
+      assert(caller == owner);
       name := p;
       return true;
   };
 
   public shared({ caller }) func setAvatar(p: Text) : async Bool {
-      // assert(caller == owner);
+      assert(caller == owner);
       avatar := p;
       return true;
+  };
+
+  public shared({ caller }) func setCover(p: Text) : async Bool {
+      assert(caller == owner);
+      cover := p;
+      return true;
+  };
+
+  public shared({ caller }) func setDesc(p: Text) : async Bool {
+      assert(caller == owner);
+      desc := p;
+      return true;
+  };
+
+  public shared({ caller }) func setPayee(p: Ledger.AccountIdentifier) : async Bool {
+      assert(caller == owner);
+      switch(payee){
+        case(null){
+          payee := ?p;
+          return true;
+        };
+        case(_){
+          return false;
+        };
+      }
   };
 
   // set subcribe prices
   // free => empty prices []
   public shared({ caller }) func setSubPrices(prices: [SubcribePrice]): async Bool {
-    // assert(caller == owner);
+    assert(caller == owner);
     subprices := prices;
     // old subcribers change to #Permanent or ...
     return true;
@@ -251,11 +350,11 @@ shared({caller}) actor class Planet(
 
   // owner or writer add article
   public shared({caller}) func addArticle(p : ArticleArgs): async OpResult {
-    // assert(checkPoster(caller));
-    articleindex := articleindex + 1;
+    assert(checkPoster(caller));
+    // articleindex := articleindex + 1;
 
     let article : Article = {
-      id = articleindex;
+      id = ulse.new();
       atype = p.atype;
       var title = p.title;
       var thumb = p.thumb;
@@ -264,7 +363,7 @@ shared({caller}) actor class Planet(
       var content = p.content;
       var cate = p.cate;
       var subcate = p.subcate;
-      created = 0;
+      created = Time.now();
       var updated = 0;
       var toped = 0;
       var status = p.status;
@@ -278,14 +377,13 @@ shared({caller}) actor class Planet(
     };
 
     ignore DQueue.pushFront(article, articles);
-    // Queue.pushFront(article, articles);
 
-    return #Ok({ id = article.id;});
+    return #Ok({ data = Ulid.toText(article.id);});
   };
 
   // owner or writer add article
   public shared({caller}) func updateArticle(p : ArticleArgs): async OpResult {
-    // assert(checkPoster(caller)); // must check writer
+    assert(checkPoster(caller)); // must check writer
     switch(findArticle(p.id)) {
       case(?article){
         article.title := p.title;
@@ -297,7 +395,7 @@ shared({caller}) actor class Planet(
         article.allowComment := p.allowComment;
         article.version := article.version + 1;
         article.tags := p.tags;
-        return #Ok({ id = article.id; });
+        return #Ok({ data = p.id; });
       };
       case(_){
         return #Err("article id not exist");
@@ -306,8 +404,8 @@ shared({caller}) actor class Planet(
     // return #Err("not support");
   };
 
-  public shared({caller}) func topedArticle(aid: Nat, toped: Bool): async OpResult {
-    // assert(checkPoster(caller)); // must check writer
+  public shared({caller}) func topedArticle(aid: Text, toped: Bool): async OpResult {
+    assert(checkPoster(caller)); // must check writer
     switch(findArticle(aid)) {
       case(?article){
         if (toped) {
@@ -315,7 +413,7 @@ shared({caller}) actor class Planet(
         } else {
           article.toped := 0
         };
-        return #Ok({ id = aid; });
+        return #Ok({ data = aid; });
       };
       case(_){
         return #Err("article id not exist");
@@ -324,8 +422,8 @@ shared({caller}) actor class Planet(
     // return #Err("not support");
   };
 
-  public shared({caller}) func deleteArticle(aid: Nat): async Bool {
-    // assert(checkPoster(caller)); // must check writer
+  public shared({caller}) func deleteArticle(aid: Text): async Bool {
+    assert(checkPoster(caller)); // must check writer
     switch(findArticle(aid)) {
       case(?article){
         switch(article.status) {
@@ -344,7 +442,7 @@ shared({caller}) actor class Planet(
     };
   };
 
-  public shared({caller}) func copyright(aid : Nat): async Bool {
+  public shared({caller}) func copyright(aid : Text): async Bool {
     // assert(checkPoster(caller)); // must check writer
     return false;
   };
@@ -425,7 +523,7 @@ shared({caller}) actor class Planet(
           return;
         };
         // subcribe also return list, but not allow read content
-        // if (not issubcriber and req.statue == #Subcribe) {
+        // if (not issubcriber and req.status == #Subcribe) {
         //   return;
         // }
       };
@@ -467,6 +565,17 @@ shared({caller}) actor class Planet(
     return (page, size);
   };
 
+
+  private func permissionType(caller: Principal): PermissionType {
+    if (checkOwner(caller)) {
+      return #OWNER;
+    };
+    if (checkWriter(caller)) {
+      return #WRITER;
+    };
+    return #NONE;
+  };
+
   private func checkOwner(caller: Principal): Bool {
     return Principal.equal(caller, owner);
   };
@@ -475,7 +584,10 @@ shared({caller}) actor class Planet(
     if (checkOwner(caller)) {
       return true;
     };
+    return checkWriter(caller);
+  };
 
+  private func checkWriter(caller: Principal): Bool {
     for (writer in writers.vals()) {
       if (Principal.equal(caller, writer)) {
         return true;
@@ -509,7 +621,7 @@ shared({caller}) actor class Planet(
     let from = Util.principalToSubAccount(order.from);
     let payAmount = order.amount - FEE;
     let payTo : Ledger.TransferArgs = {
-      to = payee;
+      to = accountId(null);
       fee = { e8s = FEE};
       memo = 0;
       amount = { e8s = payAmount};
@@ -562,12 +674,16 @@ shared({caller}) actor class Planet(
     return allcates.toArray();
   };
 
-  private func findArticle(aid : Nat) : ?Article {
-    DQueue.find(articles, eqId(aid));
+  private func findArticle(aid : Text) : ?Article {
+    DQueue.find(articles, eqUlid(aid));
   };
 
-  private func findComment(aid : Nat) : ?Article {
-    DQueue.find(articles, eqId(aid));
+  private func findComment(cid : Nat) : ?Comment {
+    DQueue.find(comments, eqId(cid));
+  };
+
+  private func eqUlid(aid : Text) : {id : Ulid.ULID } -> Bool {
+    func (x : { id : Ulid.ULID }) : Bool { Ulid.toText(x.id) == aid };
   };
 
   private func eqId(aid : Nat) : {id : Nat } -> Bool {
