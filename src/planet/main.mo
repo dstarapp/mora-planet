@@ -54,10 +54,12 @@ shared({caller}) actor class Planet(
   type ArticleArgs = Query.ArticleArgs;
   type CommentArgs = Query.CommentArgs;
   type QuerySubcriber = Query.QuerySubcriber;
-  type QueryCategory = Query.QueryCategory;
+  // type QueryCategory = Query.QueryCategory;
   type QueryArticle = Query.QueryArticle;
   type QueryArticleReq = Query.QueryArticleReq;
   type QueryArticleResp = Query.QueryArticleResp;
+  type QueryDetailResp = Query.QueryDetailResp;
+
 
   type DQueue<T> = DQueue.DQueue<T>;
 
@@ -276,6 +278,26 @@ shared({caller}) actor class Planet(
     }
   };
 
+  public query({caller}) func adminArticle(aid: Text) : async QueryDetailResp {
+    switch(findArticle(aid)) {
+      case(?article) {
+        if (not checkOwner(caller)) {
+          // only return self created
+          if (not Principal.equal(article.author, caller)) {
+            return #Err("no permission to read this article!");
+          };
+        };
+        return #Ok({
+          article = Query.toQueryArticle(article);
+          content = article.content;
+        });
+      };
+      case(_) {
+        return #Err("article not exist!");
+      };
+    }
+  };
+
   public query({caller}) func queryArticles(req: QueryArticleReq) : async QueryArticleResp {
     let res = limitQueryArticle(caller, req);
     let data = Buffer.Buffer<QueryArticle>(res.2.size());
@@ -314,11 +336,33 @@ shared({caller}) actor class Planet(
     }
   };
 
-  // public shared({ caller }) func setOwner(p :Principal): async Bool {
-  //     assert(caller == owner);
-  //     owner := p;
-  //     return true;
-  // };
+  public query({caller}) func queryArticle(aid: Text) : async QueryDetailResp {
+    switch(findArticle(aid)) {
+      case(?article) {
+        if (article.status == #Draft or article.status == #Private) {
+          return #Err("no permission to read this article!");
+        };
+        let issubcriber = checkSubcriber(caller);
+        // subcribe also return list, but not allow read content
+        if (not issubcriber and article.status == #Subcribe) {
+          return #Err("no permission to read this article!");
+        };
+        return #Ok({
+          article = Query.toQueryArticle(article);
+          content = article.content;
+        });
+      };
+      case(_) {
+        return #Err("article not exist!");
+      };
+    }
+  };
+
+  public shared({ caller }) func setOwner(p :Principal): async Bool {
+      assert(caller == owner);
+      // owner := p;
+      return false;
+  };
 
   public shared({ caller }) func setWriters(writer :[Principal]): async Bool {
       assert(caller == owner);
@@ -371,7 +415,7 @@ shared({caller}) actor class Planet(
 
   // set subcribe prices
   // free => empty prices []
-  public shared({ caller }) func setSubPrices(prices: [SubcribePrice]): async Bool {
+  public shared({ caller }) func setSubPrices(prices: [Types.SubcribePrice]): async Bool {
     assert(caller == owner);
     subprices := prices;
     // old subcribers change to #Permanent or ...
@@ -379,7 +423,7 @@ shared({caller}) actor class Planet(
   };
 
   // set all categorys
-  public shared({caller}) func setCategorys(cates: [QueryCategory]): async Bool {
+  public shared({caller}) func setCategorys(cates: [Query.QueryCategory]): async Bool {
     var catemap : HashMap.HashMap<Nat, Bool> = HashMap.HashMap<Nat, Bool>(0, Nat.equal, Hash.hash);
     for(cate in categorys.vals()) {
       catemap.put(cate.id, true);
@@ -427,6 +471,7 @@ shared({caller}) actor class Planet(
     assert(checkPoster(caller)); // must check writer
     switch(findArticle(p.id)) {
       case(?article){
+        let status = article.status;
         article.title := p.title;
         article.thumb := p.thumb;
         article.abstract := p.abstract;
@@ -436,8 +481,13 @@ shared({caller}) actor class Planet(
         article.allowComment := p.allowComment;
         article.version := article.version + 1;
         article.tags := p.tags;
-        if (article.status == #Draft and p.status != #Draft) {
+        article.updated := Time.now();
+        if (status == #Draft and p.status != #Draft) {
           article.created := Time.now();
+
+          // top must be front.
+          ignore DQueue.remove(articles, eqUlid(p.id));
+          ignore DQueue.pushFront(article, articles);
         };
         return #Ok({ data = p.id; });
       };
@@ -507,7 +557,7 @@ shared({caller}) actor class Planet(
   };
 
   // pre subcribe , generate payment order
-  public shared({caller}) func preSubcribe(source: Text, price: SubcribePrice): async PayInfo {
+  public shared({caller}) func preSubcribe(source: Text, price: Types.SubcribePrice): async PayInfo {
     let now = Time.now();
     // add pay order....
     //
@@ -592,7 +642,9 @@ shared({caller}) actor class Planet(
         };
         case(_){};
       };
-      total := total + 1;
+      if (x.status != #Draft) {
+        total := total + 1;
+      };
     });
 
     return {
@@ -665,9 +717,6 @@ shared({caller}) actor class Planet(
   };
 
   private func checkQuery(caller: Principal, x: Article, admin: Bool, req: QueryArticleReq): Bool {
-    if (x.status == #Delete) {
-      return false;
-    };
     if (admin) {
       if (not checkOwner(caller)) {
         // only return self created
@@ -676,9 +725,27 @@ shared({caller}) actor class Planet(
         };
       };
       if (x.status == #Draft) {
+        switch(req.status) {
+          case(?#Draft) {
+            return true;
+          };
+          case(_){}
+        };
+        return false;
+      };
+      if (x.status == #Delete) {
+        switch(req.status) {
+          case(?#Delete) {
+            return true;
+          };
+          case(_){}
+        };
         return false;
       };
     } else {
+      if (x.status == #Delete) {
+        return false;
+      };
       if (x.status == #Draft or x.status == #Private) {
         return false;
       };
@@ -816,7 +883,7 @@ shared({caller}) actor class Planet(
     };
   };
 
-  private func toCategory(cates : [QueryCategory], catemap : HashMap.HashMap<Nat, Bool>, parent: Nat) : [Category] {
+  private func toCategory(cates : [Query.QueryCategory], catemap : HashMap.HashMap<Nat, Bool>, parent: Nat) : [Category] {
     var allcates = Buffer.Buffer<Category>(0);
     for(cate in cates.vals()) {
       var id : Nat = 0;

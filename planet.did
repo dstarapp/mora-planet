@@ -1,0 +1,220 @@
+type Tokens = record {e8s: nat64;};
+type SubcribeType = 
+ variant {
+   Day1000;
+   Day180;
+   Day30;
+   Day360;
+   Day90;
+   Free;
+   Permanent;
+ };
+type SubcribePrice = 
+ record {
+   price: nat;
+   subType: SubcribeType;
+ };
+type QuerySubcriber = 
+ record {
+   expireTime: int;
+   pid: principal;
+   subType: SubcribeType;
+ };
+type QuerySort = 
+ variant {
+   TimeAsc;
+   TimeDesc;
+ };
+type QueryDetailResp = 
+ variant {
+   Err: text;
+   Ok: record {
+         article: QueryArticle;
+         content: text;
+       };
+ };
+type QueryCategory = 
+ record {
+   children: vec QueryCategory;
+   id: nat;
+   name: text;
+ };
+type QueryArticleResp = 
+ record {
+   data: vec QueryArticle;
+   hasmore: bool;
+   page: nat;
+   stat: ArticleStat;
+   total: int;
+ };
+type QueryArticleReq = 
+ record {
+   atype: opt ArticleType;
+   cate: nat;
+   page: nat;
+   search: text;
+   size: nat;
+   sort: QuerySort;
+   status: opt ArticleStatus;
+   subcate: nat;
+ };
+type QueryArticle = 
+ record {
+   abstract: text;
+   allowComment: bool;
+   atype: ArticleType;
+   author: principal;
+   cate: nat;
+   comment: nat;
+   copyright: opt text;
+   created: int;
+   id: text;
+   like: nat;
+   status: ArticleStatus;
+   subcate: nat;
+   tags: vec text;
+   thumb: text;
+   title: text;
+   toped: int;
+   unlike: nat;
+   updated: int;
+   view: nat64;
+ };
+type PlanetInfo = 
+ record {
+   article: nat;
+   articleStat: ArticleStat;
+   avatar: text;
+   canister: principal;
+   categorys: vec QueryCategory;
+   cover: text;
+   created: int;
+   desc: text;
+   income: nat64;
+   last24subcriber: nat;
+   memory: nat;
+   name: text;
+   owner: principal;
+   payee: opt blob;
+   permission: PermissionType;
+   subcriber: nat;
+   subcribers: vec QuerySubcriber;
+   subprices: vec SubcribePrice;
+   twitter: text;
+   url: text;
+   writers: vec principal;
+ };
+type PlanetBase = 
+ record {
+   article: nat;
+   avatar: text;
+   canister: principal;
+   cover: text;
+   created: int;
+   desc: text;
+   income: nat64;
+   name: text;
+   owner: principal;
+   subcriber: nat;
+   subcribers: vec QuerySubcriber;
+   subprices: vec SubcribePrice;
+   twitter: text;
+   url: text;
+   writers: vec principal;
+ };
+type Planet = 
+ service {
+   addArticle: (ArticleArgs) -> (OpResult);
+   addComment: (CommentArgs) -> (OpResult);
+   adminArticle: (text) -> (QueryDetailResp) query;
+   adminArticles: (QueryArticleReq) -> (QueryArticleResp) query;
+   adminContent: (text) -> (OpResult) query;
+   canisterAccount: () -> (AccountIdentifier) query;
+   canisterBalance: () -> (Tokens);
+   canisterMemory: () -> (nat) query;
+   copyright: (text) -> (bool);
+   deleteArticle: (text) -> (bool);
+   getPlanetBase: () -> (PlanetBase) query;
+   getPlanetInfo: () -> (PlanetInfo) query;
+   preSubcribe: (text, SubcribePrice) -> (PayInfo);
+   queryArticle: (text) -> (QueryDetailResp) query;
+   queryArticles: (QueryArticleReq) -> (QueryArticleResp) query;
+   queryContent: (text) -> (OpResult) query;
+   setAvatar: (text) -> (bool);
+   setCategorys: (vec QueryCategory) -> (bool);
+   setCover: (text) -> (bool);
+   setDesc: (text) -> (bool);
+   setName: (text) -> (bool);
+   setOwner: (principal) -> (bool);
+   setPayee: (AccountIdentifier) -> (bool);
+   setSubPrices: (vec SubcribePrice) -> (bool);
+   setTwitter: (text) -> (bool);
+   setWriters: (vec principal) -> (bool);
+   subcribe: (nat64) -> (bool);
+   topedArticle: (text, bool) -> (OpResult);
+   updateArticle: (ArticleArgs) -> (OpResult);
+   wallet_balance: () -> (nat) query;
+   wallet_receive: () -> (record {accepted: nat64;});
+ };
+type PermissionType = 
+ variant {
+   NONE;
+   OWNER;
+   WRITER;
+ };
+type PayInfo = 
+ record {
+   amount: nat64;
+   id: nat64;
+   to: blob;
+ };
+type OpResult = 
+ variant {
+   Err: text;
+   Ok: record {data: text;};
+ };
+type CommentArgs = 
+ record {
+   content: text;
+   parent: int;
+ };
+type ArticleType = 
+ variant {
+   Article;
+   Audio;
+   Photos;
+   Shortle;
+   Video;
+ };
+type ArticleStatus = 
+ variant {
+   Delete;
+   Draft;
+   Private;
+   Public;
+   Subcribe;
+ };
+type ArticleStat = 
+ record {
+   draftCount: nat;
+   privateCount: nat;
+   publicCount: nat;
+   subcribeCount: nat;
+   total: nat;
+ };
+type ArticleArgs = 
+ record {
+   abstract: text;
+   allowComment: bool;
+   atype: ArticleType;
+   cate: nat;
+   content: text;
+   id: text;
+   status: ArticleStatus;
+   subcate: nat;
+   tags: vec text;
+   thumb: text;
+   title: text;
+ };
+type AccountIdentifier = blob;
+service : (principal, text, text, text, AccountIdentifier) -> Planet

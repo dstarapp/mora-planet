@@ -6,7 +6,7 @@ import Buffer "mo:base/Buffer";
 module {
 
   type PermissionType = Types.PermissionType;
-  type SubcribeType = Types.SubcribeType;
+  // type SubcribeType = Types.SubcribeType;
   type ArticleType = Types.ArticleType;
   type ArticleStatus = Types.ArticleStatus;
   type CommentStatus = Types.CommentStatus;
@@ -24,7 +24,7 @@ module {
 
   public type QuerySubcriber = {
     pid : Principal;
-    subType: SubcribeType;
+    subType: Types.SubcribeType;
     expireTime: Int;
   };
 
@@ -50,7 +50,7 @@ module {
     twitter: Text;
     desc: Text;
     created: Int;
-    subprices: [SubcribePrice];
+    subprices: [Types.SubcribePrice];
     subcriber: Nat;
     subcribers: [QuerySubcriber];
     article: Nat;
@@ -70,7 +70,7 @@ module {
     desc: Text;
     created: Int;
     writers: [Principal];
-    subprices: [SubcribePrice];
+    subprices: [Types.SubcribePrice];
     subcriber: Nat;
     article: Nat;
     income: Nat64;
@@ -117,6 +117,14 @@ module {
     comment: Nat;
     tags: [Text];
     copyright: ?Text;
+  };
+
+  public type QueryDetailResp = {
+    #Ok: {
+      article: QueryArticle;
+      content: Text;
+    };
+    #Err: Text;
   };
 
   public type QuerySort = {

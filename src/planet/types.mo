@@ -177,6 +177,9 @@ module {
 
   // 1 6 5 4 3 2 0
   public func beforeCreated(a: Article, b: Article): Bool {
+    if (b.toped > 0) {
+      return false;
+    };
     return a.created > b.created;
   };
 }
