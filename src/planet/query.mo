@@ -1,6 +1,7 @@
 
 import Ulid "mo:ulid/ULID";
 import Types "./types";
+import Buffer "mo:base/Buffer";
 
 module {
 
@@ -30,6 +31,14 @@ module {
   public type OpResult = {
     #Ok: { data : Text; };
     #Err: Text;
+  };
+
+  public type ArticleStat = {
+    total: Nat;
+    publicCount: Nat;
+    privateCount: Nat;
+    subcribeCount: Nat;
+    draftCount: Nat;
   };
 
   public type PlanetBase = {
@@ -66,8 +75,12 @@ module {
     article: Nat;
     income: Nat64;
     canister: Principal;
+    categorys: [QueryCategory];
     memory: Nat;
     url: Text;
+    last24subcriber: Nat;
+    subcribers: [QuerySubcriber];
+    articleStat: ArticleStat;
   };
 
   public type ArticleArgs = {
@@ -75,7 +88,6 @@ module {
     atype: ArticleType;
     title: Text;
     thumb: Text;
-    author: Principal;
     abstract: Text;
     content: Text;
     cate: Nat;
@@ -102,6 +114,7 @@ module {
     like: Nat;
     unlike: Nat;
     view: Nat64;
+    comment: Nat;
     tags: [Text];
     copyright: ?Text;
   };
@@ -116,6 +129,8 @@ module {
     size: Nat;
     cate: Nat;
     subcate: Nat;
+    status: ?ArticleStatus;
+    atype: ?ArticleType;
     search: Text;
     sort: QuerySort;
   };
@@ -124,6 +139,7 @@ module {
     page: Nat;
     total: Int;
     hasmore: Bool;
+    stat: ArticleStat;
     data: [QueryArticle];
   };
 
@@ -141,6 +157,30 @@ module {
     status: CommentStatus;
     created: Int;
     child: ?QueryComment;
+  };
+
+  public func toQueryCategory(cats : [Category]): [QueryCategory] {
+    var ret = Buffer.Buffer<QueryCategory>(0);
+    for (cat in cats.vals()) {
+      let children = Buffer.Buffer<QueryCategory>(0);
+      if (cat.parent == 0) {
+        for (c2 in cats.vals()) {
+          if (c2.parent == cat.id) {
+            children.add({
+              id = c2.id;
+              name = c2.name;
+              children = [];
+            })
+          };
+        };
+        ret.add({
+          id = cat.id;
+          name = cat.name;
+          children = children.toArray();
+        });
+      };
+    };
+    return ret.toArray();
   };
 
   public func toQuerySubcriber(p: Subcriber): QuerySubcriber {
@@ -169,6 +209,7 @@ module {
       like = p.like;
       unlike = p.unlike;
       view = p.view;
+      comment = p.comment;
       tags = p.tags;
       copyright = p.copyright;
     };

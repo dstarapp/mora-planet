@@ -15,15 +15,17 @@ import Nat64 "mo:base/Nat64";
 import Prim "mo:prim";
 import Principal "mo:base/Principal";
 import Query "./query";
+import RBTree "mo:base/RBTree";
+import Source "mo:ulid/Source";
 import Text "mo:base/Text";
 import Time "mo:base/Time";
 import Trie "mo:base/Trie";
 import TrieMap "mo:base/TrieMap";
-import Ulid "mo:ulid/ULID";
-import Source "mo:ulid/Source";
-import XorShift "mo:rand/XorShift";
+import Type "types";
 import Types "./types";
+import Ulid "mo:ulid/ULID";
 import Util "./utils/Util";
+import XorShift "mo:rand/XorShift";
 
 shared({caller}) actor class Planet(
   _owner : Principal,
@@ -43,7 +45,9 @@ shared({caller}) actor class Planet(
   type PayOrder = Types.PayOrder;
   type PayType = Types.PayType;
   type ArgeeSharePay = Types.ArgeeSharePay;
+  type SortArticle = Types.SortArticle;
 
+  type ArticleStat = Query.ArticleStat;
   type PlanetInfo = Query.PlanetInfo;
   type PlanetBase = Query.PlanetBase;
   type OpResult = Query.OpResult;
@@ -175,6 +179,8 @@ shared({caller}) actor class Planet(
       topsubcribers.add(Query.toQuerySubcriber(s));
     };
 
+    let stat = statAdminArticleIter(caller, false, DQueue.toIter(articles));
+
     return {
         owner = owner;
         writers = writers;
@@ -187,7 +193,7 @@ shared({caller}) actor class Planet(
         subprices = subprices;
         subcribers = topsubcribers.toArray();
         subcriber = DQueue.size(subcribers);
-        article = DQueue.size(articles);
+        article = stat.total;
         income = totalIncome;
         canister = Principal.fromActor(this);
         url = customurl;
@@ -196,6 +202,18 @@ shared({caller}) actor class Planet(
 
   public query({caller}) func getPlanetInfo(): async PlanetInfo {
       assert(checkPoster(caller)); //
+      var topsubcribers = Buffer.Buffer<QuerySubcriber>(0);
+      var count = 0;
+      label top for (s in DQueue.toReverseIter(subcribers)) {
+        if (count >= 10) {
+          break top;
+        };
+        count := count + 1;
+        topsubcribers.add(Query.toQuerySubcriber(s));
+      };
+
+      let stat = statAdminArticleIter(caller, true, DQueue.toIter(articles));
+
       return {
           owner = owner;
           permission = permissionType(caller);
@@ -209,11 +227,15 @@ shared({caller}) actor class Planet(
           writers = writers;
           subprices = subprices;
           subcriber = DQueue.size(subcribers);
-          article = DQueue.size(articles);
+          article = stat.total;
           income = totalIncome;
           canister = Principal.fromActor(this);
+          categorys = Query.toQueryCategory(categorys);
+          subcribers = topsubcribers.toArray();
+          last24subcriber = 0;
           memory = Prim.rts_memory_size();
           url = customurl;
+          articleStat = stat;
       };
   };
 
@@ -226,11 +248,14 @@ shared({caller}) actor class Planet(
       data.add(Query.toQueryArticle(x));
     };
 
+    let stat = statAdminArticleIter(caller, true, DQueue.toIter(articles));
+
     return {
       page = req.page;
       total = res.0;
       hasmore = res.1;
       data = data.toArray();
+      stat = stat;
     };
   };
 
@@ -259,11 +284,14 @@ shared({caller}) actor class Planet(
       data.add(Query.toQueryArticle(x));
     };
 
+    let stat = statAdminArticleIter(caller, false, DQueue.toIter(articles));
+
     return {
       page = req.page;
       total = res.0;
       hasmore = res.1;
       data = data.toArray();
+      stat = stat;
     };
   };
 
@@ -285,6 +313,12 @@ shared({caller}) actor class Planet(
       };
     }
   };
+
+  // public shared({ caller }) func setOwner(p :Principal): async Bool {
+  //     assert(caller == owner);
+  //     owner := p;
+  //     return true;
+  // };
 
   public shared({ caller }) func setWriters(writer :[Principal]): async Bool {
       assert(caller == owner);
@@ -313,6 +347,12 @@ shared({caller}) actor class Planet(
   public shared({ caller }) func setDesc(p: Text) : async Bool {
       assert(caller == owner);
       desc := p;
+      return true;
+  };
+
+  public shared({ caller }) func setTwitter(p: Text) : async Bool {
+      assert(caller == owner);
+      twitter := p;
       return true;
   };
 
@@ -363,7 +403,7 @@ shared({caller}) actor class Planet(
       var content = p.content;
       var cate = p.cate;
       var subcate = p.subcate;
-      created = Time.now();
+      var created = Time.now();
       var updated = 0;
       var toped = 0;
       var status = p.status;
@@ -371,6 +411,7 @@ shared({caller}) actor class Planet(
       var like = 0;
       var unlike = 0;
       var view = 0;
+      var comment = 0;
       var tags = p.tags;
       var version = 0;
       var copyright = null;
@@ -395,6 +436,9 @@ shared({caller}) actor class Planet(
         article.allowComment := p.allowComment;
         article.version := article.version + 1;
         article.tags := p.tags;
+        if (article.status == #Draft and p.status != #Draft) {
+          article.created := Time.now();
+        };
         return #Ok({ data = p.id; });
       };
       case(_){
@@ -408,10 +452,21 @@ shared({caller}) actor class Planet(
     assert(checkPoster(caller)); // must check writer
     switch(findArticle(aid)) {
       case(?article){
+        if (article.status != #Public) {
+          return #Err("only public article can be top");
+        };
         if (toped) {
           article.toped := Time.now();
-        } else {
-          article.toped := 0
+
+          // top must be front.
+          ignore DQueue.remove(articles, eqUlid(aid));
+          ignore DQueue.pushFront(article, articles);
+        } else if (article.toped != 0) {
+          article.toped := 0;
+
+          // insert
+          ignore DQueue.remove(articles, eqUlid(aid));
+          ignore DQueue.insert_before(article, articles, Type.beforeCreated);
         };
         return #Ok({ data = aid; });
       };
@@ -464,7 +519,7 @@ shared({caller}) actor class Planet(
   };
 
   // subcribe with block height
-  public shared({caller}) func subcribe(payId: Nat64, height: Nat64): async Bool {
+  public shared({caller}) func subcribe(payId: Nat64): async Bool {
     //
     return false;
   };
@@ -494,14 +549,13 @@ shared({caller}) actor class Planet(
     };
   };
 
-  private func limitAdminArticleIter(caller: Principal, admin: Bool, req: QueryArticleReq, iter: Iter.Iter<Article>): (Int, Bool, [Article]) {
-    var data = Buffer.Buffer<Article>(0);
+  private func statAdminArticleIter(caller: Principal, admin: Bool, iter: Iter.Iter<Article>): ArticleStat {
     var total = 0;
-    let pagesize = checkPageSize(req.page, req.size);
-    let size = pagesize.1;
-    var start = (pagesize.0 - 1) * size;
+    var subcribe = 0;
+    var pub = 0;
+    var pri = 0;
+    var draft = 0;
     var issubcriber = false;
-    var hasmore = false;
 
     if (not admin) {
       issubcriber := checkSubcriber(caller);
@@ -522,24 +576,57 @@ shared({caller}) actor class Planet(
         if (x.status == #Draft or x.status == #Private) {
           return;
         };
-        // subcribe also return list, but not allow read content
-        // if (not issubcriber and req.status == #Subcribe) {
-        //   return;
-        // }
       };
+      switch(x.status) {
+        case(#Private) {
+          pri := pri + 1;
+        };
+        case(#Subcribe) {
+          subcribe := subcribe + 1;
+        };
+        case(#Public) {
+          pub := pub + 1;
+        };
+        case(#Draft) {
+          draft := draft + 1;
+        };
+        case(_){};
+      };
+      total := total + 1;
+    });
 
-      if (req.subcate != 0 and req.subcate != x.subcate) {
+    return {
+      total = total;
+      publicCount = pub;
+      privateCount = pri;
+      subcribeCount = subcribe;
+      draftCount = draft;
+    }
+  };
+
+  private func limitAdminArticleIter(caller: Principal, admin: Bool, req: QueryArticleReq, iter: Iter.Iter<Article>): (Int, Bool, [Article]) {
+    var data = Buffer.Buffer<Article>(0);
+    let pagesize = checkPageSize(req.page, req.size);
+    let size = pagesize.1;
+    var start = (pagesize.0 - 1) * size;
+    var hasmore = false;
+
+    // var issubcriber = false;
+    // if (not admin) {
+    //   issubcriber := checkSubcriber(caller);
+    // };
+    let topvalue = limitTopArticleIter(caller, admin, req, data);
+    var total = topvalue.0;
+    // Debug.print("total top " # debug_show(data.toArray()));
+
+    Iter.iterate(iter, func(x: Article, idx: Int) {
+      // Debug.print("article id: " # Ulid.toText(x.id));
+      if (x.toped != 0) {
         return;
       };
-
-      if (req.cate != 0 and req.cate != x.cate) {
+      if (not checkQuery(caller, x, admin, req)) {
         return;
       };
-
-      if (Text.size(req.search) > 0 and not Text.contains(x.title, #text(req.search))) {
-        return;
-      };
-
       if (total >= start and total < start + size) {
         data.add(x);
       };
@@ -549,6 +636,88 @@ shared({caller}) actor class Planet(
       hasmore := true;
     };
     return (total, hasmore, data.toArray());
+  };
+
+  private func limitTopArticleIter(caller: Principal, admin: Bool, req: QueryArticleReq, data: Buffer.Buffer<Article>): (Int, Bool) {
+    var total = 0;
+    let pagesize = checkPageSize(req.page, req.size);
+    let size = pagesize.1;
+    var start = (pagesize.0 - 1) * size;
+    var hasmore = false;
+
+    Iter.iterate(DQueue.toIter(articles), func(x: Article, idx: Int) {
+      if (x.toped == 0) {
+        return;
+      };
+      if (not checkQuery(caller, x, admin, req)) {
+        return;
+      };
+      if (total >= start and total < start + size) {
+        data.add(x);
+      };
+      total := total + 1;
+    });
+
+    if (total >= start + size) {
+      hasmore := true;
+    };
+    return (total, hasmore);
+  };
+
+  private func checkQuery(caller: Principal, x: Article, admin: Bool, req: QueryArticleReq): Bool {
+    if (x.status == #Delete) {
+      return false;
+    };
+    if (admin) {
+      if (not checkOwner(caller)) {
+        // only return self created
+        if (not Principal.equal(x.author, caller)) {
+          return false;
+        };
+      };
+      if (x.status == #Draft) {
+        return false;
+      };
+    } else {
+      if (x.status == #Draft or x.status == #Private) {
+        return false;
+      };
+      // subcribe also return list, but not allow read content
+      // if (not issubcriber and req.status == #Subcribe) {
+      //   return;
+      // }
+    };
+
+    if (req.subcate != 0 and req.subcate != x.subcate) {
+      return false;
+    };
+
+    if (req.cate != 0 and req.cate != x.cate) {
+      return false;
+    };
+
+    switch(req.atype) {
+      case(?atype){
+        if (x.atype != atype) {
+          return false;
+        };
+      };
+      case(_){}
+    };
+
+    switch(req.status) {
+      case(?status){
+        if (x.status != status) {
+          return false;
+        };
+      };
+      case(_){}
+    };
+
+    if (Text.size(req.search) > 0 and not Text.contains(x.title, #text(req.search))) {
+      return false;
+    };
+    return true;
   };
 
   private func checkPageSize(p: Nat, s : Nat): (Int, Int) {

@@ -6,6 +6,7 @@ import Hash "mo:base/Hash";
 import Text "mo:base/Text";
 import Nat64 "mo:base/Nat64";
 import Ulid "mo:ulid/ULID";
+import Order "mo:base/Order";
 
 module {
 
@@ -68,7 +69,7 @@ module {
     var content: Text;
     var cate: Nat;
     var subcate: Nat;
-    created: Int;
+    var created: Int;
     var updated: Int;
     var toped: Int;
     var status: ArticleStatus;
@@ -76,6 +77,7 @@ module {
     var like: Nat;
     var unlike: Nat;
     var view: Nat64;
+    var comment: Nat;
     var tags: [Text];
     var version: Nat;
     var copyright: ?Text;
@@ -124,6 +126,12 @@ module {
     remark: Text;
   };
 
+  public type SortArticle = {
+    id: Ulid.ULID;
+    toped: Int;
+    created: Int;
+  };
+
   public func nextType(a: SubcribeType, b: SubcribeType): SubcribeType {
     let id1 = typeValue(a);
     let id2 = typeValue(b);
@@ -156,4 +164,19 @@ module {
     return Text.hash(Nat64.toText(n));
   };
 
+  public func compareArticleDesc(a : SortArticle, b : SortArticle) : Order.Order {
+      if (a.toped > 0 and b.toped > 0) {
+        return Int.compare(b.toped, a.toped);
+      } else if (a.toped > 0 and b.toped <= 0) {
+        return #less;
+      } else if (b.toped > 0 and a.toped <= 0) {
+        return #greater;
+      };
+      return Int.compare(b.created, a.created);
+  };
+
+  // 1 6 5 4 3 2 0
+  public func beforeCreated(a: Article, b: Article): Bool {
+    return a.created > b.created;
+  };
 }

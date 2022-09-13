@@ -98,6 +98,84 @@ module DQueue {
     q
   };
 
+  public func insert_after<T>(item: T, q: DQueue<T>, eq: (T, T) -> Bool) : DQueue<T> {
+    let list : List<T> = { item = item; var next = null; var prev = null; };
+    switch (q.first, q.last) {
+      case (?first, ?last) {
+        var cur = first;
+        label L loop {
+          switch (cur.next) {
+            case(null){
+              break L;
+            };
+            case(?next){
+              if (eq(item, cur.item)) {
+                break L;
+              };
+              cur := next;
+            };
+          };
+        };
+        list.prev := ?cur;
+        list.next := cur.next;
+        switch(cur.next){
+          case(null){
+            q.last := ?list;
+          };
+          case(?next){
+            next.prev := ?list;
+          };
+        };
+        cur.next := ?list;
+      };
+      case (_, _) {
+        q.first := ?list;
+        q.last := q.first;
+      };
+    };
+    q.size := q.size + 1;
+    q
+  };
+
+  public func insert_before<T>(item: T, q: DQueue<T>, eq: (T, T) -> Bool) : DQueue<T> {
+    let list : List<T> = { item = item; var next = null; var prev = null; };
+    switch (q.first, q.last) {
+      case (?first, ?last) {
+        var cur = first;
+        label L loop {
+          switch (cur.next) {
+            case(null){
+              break L;
+            };
+            case(?next){
+              if (eq(item, cur.item)) {
+                break L;
+              };
+              cur := next;
+            };
+          };
+        };
+        list.next := ?cur;
+        list.prev := cur.prev;
+        switch(cur.prev) {
+          case(null) {
+            q.first := ?list;
+          };
+          case(?prev){
+            prev.next := ?list;
+          };
+        };
+        cur.prev := ?list;
+      };
+      case (_, _) {
+        q.first := ?list;
+        q.last := q.first;
+      };
+    };
+    q.size := q.size + 1;
+    q
+  };
+
   public func removeOne<T>(q: DQueue<T>, eq: T -> Bool) : ?T {
     switch (q.first, q.last) {
       case (?first, ?last) {
