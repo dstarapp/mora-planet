@@ -1,3 +1,9 @@
+type TransferArgs = 
+ record {
+   amount: nat64;
+   memo: nat64;
+   to: blob;
+ };
 type Tokens = record {e8s: nat64;};
 type SubcribeType = 
  variant {
@@ -32,6 +38,32 @@ type QueryDetailResp =
          article: QueryArticle;
          content: text;
        };
+ };
+type QueryCommentResp = 
+ record {
+   data: vec QueryComment;
+   hasmore: bool;
+   page: nat;
+   total: int;
+ };
+type QueryCommentReq = 
+ record {
+   aid: text;
+   page: nat;
+   pid: opt principal;
+   size: nat;
+   sort: QuerySort;
+ };
+type QueryComment = 
+ record {
+   aid: text;
+   content: text;
+   created: int;
+   id: nat;
+   like: nat;
+   pid: principal;
+   reply: opt QueryComment;
+   status: CommentStatus;
  };
 type QueryCategory = 
  record {
@@ -109,6 +141,7 @@ type PlanetBase =
    article: nat;
    avatar: text;
    canister: principal;
+   categorys: vec QueryCategory;
    cover: text;
    created: int;
    desc: text;
@@ -128,18 +161,21 @@ type Planet =
    addComment: (CommentArgs) -> (OpResult);
    adminArticle: (text) -> (QueryDetailResp) query;
    adminArticles: (QueryArticleReq) -> (QueryArticleResp) query;
-   adminContent: (text) -> (OpResult) query;
+   adminComments: (QueryCommentReq) -> (QueryCommentResp) query;
+   adminReplyComment: (nat, CommentArgs) -> (OpResult);
+   adminShowComment: (nat, bool) -> (bool);
    canisterAccount: () -> (AccountIdentifier) query;
    canisterBalance: () -> (Tokens);
    canisterMemory: () -> (nat) query;
+   canisterTransfer: (TransferArgs) -> (bool);
    copyright: (text) -> (bool);
    deleteArticle: (text) -> (bool);
    getPlanetBase: () -> (PlanetBase) query;
    getPlanetInfo: () -> (PlanetInfo) query;
-   preSubcribe: (text, SubcribePrice) -> (PayInfo);
+   preSubcribe: (text, SubcribePrice) -> (PayResp);
    queryArticle: (text) -> (QueryDetailResp) query;
    queryArticles: (QueryArticleReq) -> (QueryArticleResp) query;
-   queryContent: (text) -> (OpResult) query;
+   queryComments: (QueryCommentReq) -> (QueryCommentResp) query;
    setAvatar: (text) -> (bool);
    setCategorys: (vec QueryCategory) -> (bool);
    setCover: (text) -> (bool);
@@ -153,6 +189,10 @@ type Planet =
    subcribe: (nat64) -> (bool);
    topedArticle: (text, bool) -> (OpResult);
    updateArticle: (ArticleArgs) -> (OpResult);
+   verifyOwner: (opt principal) -> (bool) query;
+   verifyOwnerWriter: (opt principal) -> (bool) query;
+   verifySubcriber: (opt principal) -> (bool) query;
+   verifyWriter: (opt principal) -> (bool) query;
    wallet_balance: () -> (nat) query;
    wallet_receive: () -> (record {accepted: nat64;});
  };
@@ -162,10 +202,21 @@ type PermissionType =
    OWNER;
    WRITER;
  };
+type PayType = 
+ variant {
+   Price: SubcribePrice;
+   Verify: bool;
+ };
+type PayResp = 
+ variant {
+   Err: text;
+   Ok: record {invoice: PayInfo;};
+ };
 type PayInfo = 
  record {
    amount: nat64;
    id: nat64;
+   paytype: PayType;
    to: blob;
  };
 type OpResult = 
@@ -173,10 +224,15 @@ type OpResult =
    Err: text;
    Ok: record {data: text;};
  };
+type CommentStatus = 
+ variant {
+   Invisible;
+   Visible;
+ };
 type CommentArgs = 
  record {
+   aid: text;
    content: text;
-   parent: int;
  };
 type ArticleType = 
  variant {
