@@ -49,6 +49,7 @@ module {
     cover : Text;
     twitter : Text;
     desc : Text;
+    lang : Text;
     created : Int;
     subprices : [Types.SubcribePrice];
     subcriber : Nat;
@@ -69,6 +70,7 @@ module {
     cover : Text;
     twitter : Text;
     desc : Text;
+    lang : Text;
     created : Int;
     writers : [Principal];
     subprices : [Types.SubcribePrice];
@@ -181,6 +183,26 @@ module {
     total : Int;
     hasmore : Bool;
     data : [QueryComment];
+  };
+
+  public type QueryCommonReq = {
+    page : Nat;
+    size : Nat;
+    sort : QuerySort;
+  };
+
+  public type QueryBlackUserResp = {
+    page : Nat;
+    total : Int;
+    hasmore : Bool;
+    data : [Types.BlackUser];
+  };
+
+  public type QuerySubcriberResp = {
+    page : Nat;
+    total : Int;
+    hasmore : Bool;
+    data : [QuerySubcriber];
   };
 
   public type TransferArgs = {

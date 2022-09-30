@@ -20,6 +20,13 @@ type SubcribePrice =
    price: nat;
    subType: SubcribeType;
  };
+type QuerySubcriberResp = 
+ record {
+   data: vec QuerySubcriber;
+   hasmore: bool;
+   page: nat;
+   total: int;
+ };
 type QuerySubcriber = 
  record {
    expireTime: int;
@@ -38,6 +45,12 @@ type QueryDetailResp =
          article: QueryArticle;
          content: text;
        };
+ };
+type QueryCommonReq = 
+ record {
+   page: nat;
+   size: nat;
+   sort: QuerySort;
  };
 type QueryCommentResp = 
  record {
@@ -70,6 +83,13 @@ type QueryCategory =
    children: vec QueryCategory;
    id: nat;
    name: text;
+ };
+type QueryBlackUserResp = 
+ record {
+   data: vec BlackUser;
+   hasmore: bool;
+   page: nat;
+   total: int;
  };
 type QueryArticleResp = 
  record {
@@ -123,6 +143,7 @@ type PlanetInfo =
    created: int;
    desc: text;
    income: nat64;
+   lang: text;
    last24subcriber: nat;
    memory: nat;
    name: text;
@@ -146,6 +167,7 @@ type PlanetBase =
    created: int;
    desc: text;
    income: nat64;
+   lang: text;
    name: text;
    owner: principal;
    subcriber: nat;
@@ -158,12 +180,15 @@ type PlanetBase =
 type Planet = 
  service {
    addArticle: (ArticleArgs) -> (OpResult);
+   addBlackUser: (principal) -> (bool);
    addComment: (CommentArgs) -> (OpResult);
    adminArticle: (text) -> (QueryDetailResp) query;
    adminArticles: (QueryArticleReq) -> (QueryArticleResp) query;
+   adminBlackUsers: (QueryCommonReq) -> (QueryBlackUserResp) query;
    adminComments: (QueryCommentReq) -> (QueryCommentResp) query;
    adminReplyComment: (nat, CommentArgs) -> (OpResult);
    adminShowComment: (nat, bool) -> (bool);
+   adminSubcribers: (QueryCommonReq) -> (QuerySubcriberResp) query;
    canisterAccount: () -> (AccountIdentifier) query;
    canisterBalance: () -> (Tokens);
    canisterMemory: () -> (nat) query;
@@ -172,22 +197,27 @@ type Planet =
    deleteArticle: (text) -> (bool);
    getPlanetBase: () -> (PlanetBase) query;
    getPlanetInfo: () -> (PlanetInfo) query;
-   preSubcribe: (text, SubcribePrice) -> (PayResp);
+   getSelfSubcriber: () -> (opt QuerySubcriber);
+   preSubscribe: (text, SubcribePrice) -> (PayResp);
    queryArticle: (text) -> (QueryDetailResp) query;
    queryArticles: (QueryArticleReq) -> (QueryArticleResp) query;
    queryComments: (QueryCommentReq) -> (QueryCommentResp) query;
+   removeBlackUser: (principal) -> (bool);
    setAvatar: (text) -> (bool);
    setCategorys: (vec QueryCategory) -> (bool);
    setCover: (text) -> (bool);
+   setCustomUrl: (text) -> (bool);
    setDesc: (text) -> (bool);
+   setLang: (text) -> (bool);
    setName: (text) -> (bool);
    setOwner: (principal) -> (bool);
-   setPayee: (AccountIdentifier) -> (bool);
    setSubPrices: (vec SubcribePrice) -> (bool);
    setTwitter: (text) -> (bool);
    setWriters: (vec principal) -> (bool);
-   subcribe: (nat64) -> (bool);
+   subscribe: (nat64) -> (bool);
    topedArticle: (text, bool) -> (OpResult);
+   transferSubscribe: (principal) -> (bool);
+   unsubscribe: () -> (bool);
    updateArticle: (ArticleArgs) -> (OpResult);
    verifyOwner: (opt principal) -> (bool) query;
    verifyOwnerWriter: (opt principal) -> (bool) query;
@@ -233,6 +263,11 @@ type CommentArgs =
  record {
    aid: text;
    content: text;
+ };
+type BlackUser = 
+ record {
+   created: int;
+   pid: principal;
  };
 type ArticleType = 
  variant {

@@ -154,6 +154,11 @@ module {
     created : Int;
   };
 
+  public type BlackUser = {
+    pid : Principal;
+    created : Int;
+  };
+
   public func nextType(a : SubcribeType, b : SubcribeType) : SubcribeType {
     let id1 = typeValue(a);
     let id2 = typeValue(b);
