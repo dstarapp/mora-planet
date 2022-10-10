@@ -26,6 +26,7 @@ module {
     pid : Principal;
     subType : Types.SubcribeType;
     expireTime : Int;
+    isblack : Bool;
   };
 
   public type OpResult = {
@@ -118,6 +119,7 @@ module {
     unlike : Nat;
     view : Nat64;
     comment : Nat;
+    commentTotal : Nat;
     tags : [Text];
     copyright : ?Text;
   };
@@ -205,6 +207,11 @@ module {
     data : [QuerySubcriber];
   };
 
+  public type QuerySelfSubscriber = {
+    data : ?QuerySubcriber;
+    isblack : Bool;
+  };
+
   public type TransferArgs = {
     to : Blob;
     memo : Nat64;
@@ -227,11 +234,12 @@ module {
     return ret.toArray();
   };
 
-  public func toQuerySubcriber(p : Subcriber) : QuerySubcriber {
+  public func toQuerySubcriber(p : Subcriber, isblack : Bool) : QuerySubcriber {
     {
       pid = p.pid;
       subType = p.subType;
       expireTime = p.expireTime / 1_000_000;
+      isblack = isblack;
     };
   };
 
@@ -254,6 +262,7 @@ module {
       unlike = p.unlike;
       view = p.view;
       comment = p.comment;
+      commentTotal = p.commentTotal;
       tags = p.tags;
       copyright = p.copyright;
     };

@@ -30,6 +30,7 @@ type QuerySubcriberResp =
 type QuerySubcriber = 
  record {
    expireTime: int;
+   isblack: bool;
    pid: principal;
    subType: SubcribeType;
  };
@@ -37,6 +38,11 @@ type QuerySort =
  variant {
    TimeAsc;
    TimeDesc;
+ };
+type QuerySelfSubscriber = 
+ record {
+   data: opt QuerySubcriber;
+   isblack: bool;
  };
 type QueryDetailResp = 
  variant {
@@ -118,6 +124,7 @@ type QueryArticle =
    author: principal;
    cate: nat;
    comment: nat;
+   commentTotal: nat;
    copyright: opt text;
    created: int;
    id: text;
@@ -197,7 +204,7 @@ type Planet =
    deleteArticle: (text) -> (bool);
    getPlanetBase: () -> (PlanetBase) query;
    getPlanetInfo: () -> (PlanetInfo) query;
-   getSelfSubcriber: () -> (opt QuerySubcriber);
+   getSelfSubcriber: () -> (QuerySelfSubscriber) query;
    preSubscribe: (text, SubcribePrice) -> (PayResp);
    queryArticle: (text) -> (QueryDetailResp) query;
    queryArticles: (QueryArticleReq) -> (QueryArticleResp) query;
@@ -248,6 +255,7 @@ type PayInfo =
    id: nat64;
    paytype: PayType;
    to: blob;
+   token: text;
  };
 type OpResult = 
  variant {

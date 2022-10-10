@@ -27,6 +27,7 @@ import DQueue "./utils/DQueue";
 import Ledger "./utils/Ledger";
 import Query "./query";
 import Users "./utils/Users";
+import Option "mo:base/Option";
 
 shared ({ caller }) actor class Planet(
   _owner : Principal,
@@ -78,7 +79,7 @@ shared ({ caller }) actor class Planet(
   private stable var cover : Text = "";
   private stable var totalIncome : Nat64 = 0;
   private stable var payee : ?Ledger.AccountIdentifier = null;
-  private stable var lang : Text = "en";
+  private stable var lang : Text = "";
   private stable var argeePayee : ArgeeSharePay = {
     ratio = 1;
     to = _agree;
@@ -102,25 +103,19 @@ shared ({ caller }) actor class Planet(
   // private var articles : TrieMap.TrieMap<Nat, Article> = TrieMap.TrieMap<Nat, Article>(Nat.equal, Hash.hash);
   // private var allTxs = TrieMap.TrieMap<Nat64, PayOrder>( Nat64.equal, Types.nat64hash);
 
+  private let blackMap = TrieMap.TrieMap<Principal, Bool>(Principal.equal, Principal.hash);
+
   private let xorr = XorShift.toReader(XorShift.XorShift64(null));
   private let ulse = Source.Source(xorr, 0);
   private let ledger : Ledger.Self = actor (Config.LEDGER_CANISTER_ID);
   private let userserver : Users.Self = actor (Config.USERS_CANISTER_ID);
   private let FEE : Nat64 = 10000;
 
-  system func preupgrade() {
-    // subprices_st := subprices.toArray();
-  };
+  system func preupgrade() {};
 
   system func postupgrade() {
-    // for ( x in subprices_st.vals()) {
-    //   subprices.add(x);
-    // };
-    let to = argeePayee.to;
-    argeePayee := {
-      ratio = 1;
-      to = to;
-      remark = "AGREEMENT";
+    for (bl in DQueue.toIter(blacks)) {
+      blackMap.put(bl.pid, true);
     };
   };
 
@@ -223,12 +218,12 @@ shared ({ caller }) actor class Planet(
   public query ({ caller }) func getPlanetBase() : async PlanetBase {
     var topsubcribers = Buffer.Buffer<QuerySubcriber>(0);
     var count = 0;
-    label top for (s in DQueue.toReverseIter(subcribers)) {
+    label top for (sb in DQueue.toReverseIter(subcribers)) {
       if (count >= 10) {
         break top;
       };
       count := count + 1;
-      topsubcribers.add(Query.toQuerySubcriber(s));
+      topsubcribers.add(Query.toQuerySubcriber(sb, isBlackUser(sb.pid)));
     };
 
     let stat = statAdminArticleIter(caller, false, DQueue.toIter(articles));
@@ -259,12 +254,12 @@ shared ({ caller }) actor class Planet(
     //
     var topsubcribers = Buffer.Buffer<QuerySubcriber>(0);
     var count = 0;
-    label top for (s in DQueue.toReverseIter(subcribers)) {
+    label top for (sb in DQueue.toReverseIter(subcribers)) {
       if (count >= 10) {
         break top;
       };
       count := count + 1;
-      topsubcribers.add(Query.toQuerySubcriber(s));
+      topsubcribers.add(Query.toQuerySubcriber(sb, isBlackUser(sb.pid)));
     };
 
     let stat = statAdminArticleIter(caller, true, DQueue.toIter(articles));
@@ -288,7 +283,7 @@ shared ({ caller }) actor class Planet(
       canister = Principal.fromActor(this);
       categorys = Query.toQueryCategory(categorys);
       subcribers = topsubcribers.toArray();
-      last24subcriber = 0;
+      last24subcriber = calcLast24Count();
       memory = Prim.rts_memory_size();
       url = customurl;
       articleStat = stat;
@@ -472,21 +467,19 @@ shared ({ caller }) actor class Planet(
     };
   };
 
-  public shared ({ caller }) func getSelfSubcriber() : async ?Query.QuerySubcriber {
+  public query ({ caller }) func getSelfSubcriber() : async Query.QuerySelfSubscriber {
     assert (not Principal.isAnonymous(caller));
-    switch (findBlackUser(caller)) {
-      case (?user) {
-        return null;
-      };
-      case (_) {};
-    };
-    switch (findSubcriber(caller)) {
+    let isblack = isBlackUser(caller);
+    let sb = switch (findSubcriber(caller)) {
       case (?sb) {
-        return ?Query.toQuerySubcriber(sb);
+        ?Query.toQuerySubcriber(sb, isblack);
       };
-      case (_) {};
+      case (_) { null };
     };
-    return null;
+    return {
+      data = sb;
+      isblack = isblack;
+    };
   };
 
   public shared ({ caller }) func adminShowComment(cid : Nat, show : Bool) : async Bool {
@@ -599,6 +592,7 @@ shared ({ caller }) actor class Planet(
           pid = p;
           created = Time.now();
         };
+        blackMap.put(p, true);
         ignore DQueue.pushFront(user, blacks);
       };
     };
@@ -674,6 +668,7 @@ shared ({ caller }) actor class Planet(
       var unlike = 0;
       var view = 0;
       var comment = 0;
+      var commentTotal = 0;
       var tags = p.tags;
       var version = 0;
       var copyright = null;
@@ -810,6 +805,11 @@ shared ({ caller }) actor class Planet(
 
   public shared ({ caller }) func addComment(comment : CommentArgs) : async OpResult {
     assert (not Principal.isAnonymous(caller));
+
+    if (isBlackUser(caller)) {
+      return #Err("no permission to comment this article!");
+    };
+
     switch (findArticle(comment.aid)) {
       case (?article) {
         if (article.status == #Draft or article.status == #Delete) {
@@ -839,6 +839,7 @@ shared ({ caller }) actor class Planet(
           var reply = null;
         };
         ignore DQueue.pushFront(add, comments);
+        article.commentTotal := article.commentTotal + 1;
 
         return #Ok({ data = debug_show (add.id) });
       };
@@ -854,6 +855,9 @@ shared ({ caller }) actor class Planet(
     assert (not Principal.isAnonymous(caller));
     if (checkOwner(caller)) {
       return #Err("you are the owner");
+    };
+    if (isBlackUser(caller)) {
+      return #Err("not allow to subscribe");
     };
 
     let now = Time.now();
@@ -897,6 +901,7 @@ shared ({ caller }) actor class Planet(
       amount = amount;
       paytype = #Price(sprice);
       source = source;
+      token = "ICP";
       var amountPaid = 0;
       var status = #Unpaid;
       var verifiedTime = null;
@@ -909,6 +914,7 @@ shared ({ caller }) actor class Planet(
       {
         invoice = {
           id = order.id;
+          token = order.token;
           amount = order.amount;
           paytype = order.paytype;
           to = accountId(?Util.generateInvoiceSubaccount(caller, order.id));
@@ -965,6 +971,7 @@ shared ({ caller }) actor class Planet(
         // sb.pid := p;
         let nsb : Subcriber = {
           pid = p;
+          created = sb.created;
           var subType = sb.subType;
           var expireTime = sb.expireTime;
         };
@@ -1062,7 +1069,7 @@ shared ({ caller }) actor class Planet(
       iter,
       func(x : Subcriber, idx : Int) {
         if (total >= start and total < start + size) {
-          data.add(Query.toQuerySubcriber(x));
+          data.add(Query.toQuerySubcriber(x, isBlackUser(x.pid)));
         };
         total := total + 1;
       },
@@ -1413,6 +1420,7 @@ shared ({ caller }) actor class Planet(
       return false;
     };
 
+    totalIncome := totalIncome + balance.e8s;
     order.status := #Paid;
     order.amountPaid := balance.e8s;
     order.verifiedTime := ?Time.now();
@@ -1443,6 +1451,7 @@ shared ({ caller }) actor class Planet(
           subcribers,
           {
             pid = user;
+            created = Time.now();
             var subType = price.subType;
             var expireTime = Time.now() + Types.typeExpiredTime(price.subType);
           },
@@ -1576,5 +1585,22 @@ shared ({ caller }) actor class Planet(
   private func genTxID(now : Time.Time) : Nat64 {
     payindex := payindex + 1;
     return payindex;
+  };
+
+  private func calcLast24Count() : Nat {
+    let n24 = Time.now() - 24 * 3600 * 1_000_000_000;
+    var count = 0;
+
+    for (sb in DQueue.toIter(subcribers)) {
+      if (sb.created > n24) {
+        count := count + 1;
+      };
+    };
+
+    return count;
+  };
+
+  private func isBlackUser(user : Principal) : Bool {
+    return Option.isSome(blackMap.get(user));
   };
 };

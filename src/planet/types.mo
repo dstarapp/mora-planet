@@ -32,6 +32,7 @@ module {
 
   public type Subcriber = {
     pid : Principal;
+    created : Int;
     var subType : SubcribeType;
     var expireTime : Time.Time;
   };
@@ -77,6 +78,7 @@ module {
     var unlike : Nat;
     var view : Nat64;
     var comment : Nat;
+    var commentTotal : Nat;
     var tags : [Text];
     var version : Nat;
     var copyright : ?Text;
@@ -120,6 +122,7 @@ module {
     amount : Nat64;
     paytype : PayType;
     source : Text;
+    token : Text;
     // source from which platform
     var amountPaid : Nat64;
     var status : PayStatus;
@@ -131,6 +134,7 @@ module {
     id : Nat64;
     // same as memo
     to : Blob;
+    token : Text;
     // canister sub account
     amount : Nat64;
     paytype : PayType;
