@@ -604,6 +604,7 @@ shared ({ caller }) actor class Planet(
     switch (findBlackUser(p)) {
       case (?user) {
         ignore DQueue.remove(blacks, func(x : { pid : Principal }) : Bool { x.pid == p });
+        blackMap.delete(p);
         return true;
       };
       case (_) {};
