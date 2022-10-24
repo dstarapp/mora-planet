@@ -29,6 +29,7 @@ type QuerySubcriberResp =
  };
 type QuerySubcriber = 
  record {
+   created: int;
    expireTime: int;
    isblack: bool;
    pid: principal;
@@ -43,6 +44,27 @@ type QuerySelfSubscriber =
  record {
    data: opt QuerySubcriber;
    isblack: bool;
+ };
+type QueryOrderResp = 
+ record {
+   data: vec QueryOrder;
+   hasmore: bool;
+   page: nat;
+   total: int;
+ };
+type QueryOrder = 
+ record {
+   amount: nat64;
+   amountPaid: nat64;
+   from: principal;
+   id: nat64;
+   paytype: PayType;
+   sharedTime: opt int;
+   source: text;
+   status: PayStatus;
+   to: blob;
+   token: text;
+   verifiedTime: opt int;
  };
 type QueryDetailResp = 
  variant {
@@ -144,6 +166,7 @@ type PlanetInfo =
    article: nat;
    articleStat: ArticleStat;
    avatar: text;
+   canindex: bool;
    canister: principal;
    categorys: vec QueryCategory;
    cover: text;
@@ -168,6 +191,7 @@ type PlanetBase =
  record {
    article: nat;
    avatar: text;
+   canindex: bool;
    canister: principal;
    categorys: vec QueryCategory;
    cover: text;
@@ -209,8 +233,10 @@ type Planet =
    queryArticle: (text) -> (QueryDetailResp) query;
    queryArticles: (QueryArticleReq) -> (QueryArticleResp) query;
    queryComments: (QueryCommentReq) -> (QueryCommentResp) query;
+   queryOrders: (QueryCommonReq) -> (QueryOrderResp) query;
    removeBlackUser: (principal) -> (bool);
    setAvatar: (text) -> (bool);
+   setCanIndex: (bool) -> (bool);
    setCategorys: (vec QueryCategory) -> (bool);
    setCover: (text) -> (bool);
    setCustomUrl: (text) -> (bool);
@@ -243,6 +269,12 @@ type PayType =
  variant {
    Price: SubcribePrice;
    Verify: bool;
+ };
+type PayStatus = 
+ variant {
+   Cancel;
+   Paid;
+   Unpaid;
  };
 type PayResp = 
  variant {

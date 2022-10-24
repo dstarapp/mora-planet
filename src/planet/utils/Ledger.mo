@@ -39,9 +39,7 @@ module {
     blocks : [Block];
     chain_length : Nat64;
     first_block_index : BlockIndex;
-    archived_blocks : [
-      { callback : QueryArchiveFn; start : BlockIndex; length : Nat64 }
-    ];
+    archived_blocks : [{ callback : QueryArchiveFn; start : BlockIndex; length : Nat64 }];
   };
   public type SubAccount = [Nat8];
   public type TimeStamp = { timestamp_nanos : Nat64 };
@@ -78,5 +76,5 @@ module {
     symbol : shared query () -> async { symbol : Text };
     transfer : shared TransferArgs -> async TransferResult;
     transfer_fee : shared query TransferFeeArg -> async TransferFee;
-  }
-}
+  };
+};

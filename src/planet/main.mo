@@ -68,6 +68,8 @@ shared ({ caller }) actor class Planet(
   type QueryBlackUserResp = Query.QueryBlackUserResp;
   type QuerySubcriberResp = Query.QuerySubcriberResp;
   type QueryDetailResp = Query.QueryDetailResp;
+  type QueryOrder = Query.QueryOrder;
+  type QueryOrderResp = Query.QueryOrderResp;
 
   type DQueue<T> = DQueue.DQueue<T>;
 
@@ -80,6 +82,7 @@ shared ({ caller }) actor class Planet(
   private stable var totalIncome : Nat64 = 0;
   private stable var payee : ?Ledger.AccountIdentifier = null;
   private stable var lang : Text = "";
+  private stable var canIndex : Bool = true;
   private stable var argeePayee : ArgeeSharePay = {
     ratio = 1;
     to = _agree;
@@ -237,6 +240,7 @@ shared ({ caller }) actor class Planet(
       twitter = twitter;
       desc = desc;
       lang = lang;
+      canindex = canIndex;
       created = created / 1_000_000;
       subprices = subprices;
       subcribers = topsubcribers.toArray();
@@ -274,6 +278,7 @@ shared ({ caller }) actor class Planet(
       twitter = twitter;
       desc = desc;
       lang = lang;
+      canindex = canIndex;
       created = created / 1_000_000;
       writers = writers;
       subprices = subprices;
@@ -467,6 +472,18 @@ shared ({ caller }) actor class Planet(
     };
   };
 
+  public query ({ caller }) func queryOrders(req : QueryCommonReq) : async QueryOrderResp {
+    assert (not Principal.isAnonymous(caller));
+    let res = limitOrders(caller, req);
+
+    return {
+      page = req.page;
+      total = res.0;
+      hasmore = res.1;
+      data = res.2;
+    };
+  };
+
   public query ({ caller }) func getSelfSubcriber() : async Query.QuerySelfSubscriber {
     assert (not Principal.isAnonymous(caller));
     let isblack = isBlackUser(caller);
@@ -572,6 +589,12 @@ shared ({ caller }) actor class Planet(
   public shared ({ caller }) func setLang(p : Text) : async Bool {
     assert (caller == owner);
     lang := Text.map(p, Prim.charToLower);
+    return true;
+  };
+
+  public shared ({ caller }) func setCanIndex(p : Bool) : async Bool {
+    assert (caller == owner);
+    canIndex := p;
     return true;
   };
 
@@ -950,15 +973,7 @@ shared ({ caller }) actor class Planet(
       return false;
     };
 
-    let res = DQueue.removeOne(subcribers, func(x : { pid : Principal }) : Bool { x.pid == caller });
-    switch (res) {
-      case (?item) {
-        ignore userserver.notify_planet_msg({ msg_type = #unsubscribe; user = caller; data = null });
-        return true;
-      };
-      case (_) {};
-    };
-    return false;
+    return await userUnsubscribe(caller);
   };
 
   // transfer subscribe
@@ -1071,6 +1086,37 @@ shared ({ caller }) actor class Planet(
       func(x : Subcriber, idx : Int) {
         if (total >= start and total < start + size) {
           data.add(Query.toQuerySubcriber(x, isBlackUser(x.pid)));
+        };
+        total := total + 1;
+      },
+    );
+    if (total >= start + size) {
+      hasmore := true;
+    };
+    return (total, hasmore, data.toArray());
+  };
+
+  private func limitOrders(caller : Principal, req : QueryCommonReq) : (Int, Bool, [QueryOrder]) {
+    var data = Buffer.Buffer<QueryOrder>(0);
+    let pagesize = checkPageSize(req.page, req.size);
+    let size = pagesize.1;
+    var start = (pagesize.0 - 1) * size;
+    var hasmore = false;
+    var total = 0;
+
+    var iter : Iter.Iter<PayOrder> = DQueue.toIter(allTxs);
+    if (req.sort == #TimeAsc) {
+      iter := DQueue.toReverseIter(allTxs);
+    };
+
+    Iter.iterate(
+      iter,
+      func(x : PayOrder, idx : Int) {
+        if (x.from != caller) {
+          return;
+        };
+        if (total >= start and total < start + size) {
+          data.add(Query.toQueryOrder(x, accountId(?Util.generateInvoiceSubaccount(x.from, x.id))));
         };
         total := total + 1;
       },
@@ -1417,13 +1463,13 @@ shared ({ caller }) actor class Planet(
     let to = accountId(?Util.generateInvoiceSubaccount(order.from, order.id));
     let balance = await ledger.account_balance({ account = to });
 
+    order.amountPaid := balance.e8s;
     if (balance.e8s < order.amount) {
       return false;
     };
 
     totalIncome := totalIncome + balance.e8s;
     order.status := #Paid;
-    order.amountPaid := balance.e8s;
     order.verifiedTime := ?Time.now();
     switch (order.paytype) {
       case (#Price(price)) {
@@ -1461,6 +1507,18 @@ shared ({ caller }) actor class Planet(
     };
 
     ignore userserver.notify_planet_msg({ msg_type = #subscribe; user = user; data = null });
+  };
+
+  private func userUnsubscribe(user : Principal) : async Bool {
+    let res = DQueue.removeOne(subcribers, func(x : { pid : Principal }) : Bool { x.pid == user });
+    switch (res) {
+      case (?item) {
+        ignore userserver.notify_planet_msg({ msg_type = #unsubscribe; user = user; data = null });
+        return true;
+      };
+      case (_) {};
+    };
+    return false;
   };
 
   // share pay to all

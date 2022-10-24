@@ -15,6 +15,7 @@ module {
   type Category = Types.Category;
   type Article = Types.Article;
   type Comment = Types.Comment;
+  type PayOrder = Types.PayOrder;
 
   public type QueryCategory = {
     id : Nat;
@@ -26,6 +27,7 @@ module {
     pid : Principal;
     subType : Types.SubcribeType;
     expireTime : Int;
+    created : Int;
     isblack : Bool;
   };
 
@@ -51,6 +53,7 @@ module {
     twitter : Text;
     desc : Text;
     lang : Text;
+    canindex : Bool;
     created : Int;
     subprices : [Types.SubcribePrice];
     subcriber : Nat;
@@ -72,6 +75,7 @@ module {
     twitter : Text;
     desc : Text;
     lang : Text;
+    canindex : Bool;
     created : Int;
     writers : [Principal];
     subprices : [Types.SubcribePrice];
@@ -212,6 +216,27 @@ module {
     isblack : Bool;
   };
 
+  public type QueryOrder = {
+    id : Nat64;
+    from : Principal;
+    to : Blob;
+    amount : Nat64;
+    paytype : Types.PayType;
+    source : Text;
+    token : Text;
+    amountPaid : Nat64;
+    status : Types.PayStatus;
+    verifiedTime : ?Int;
+    sharedTime : ?Int;
+  };
+
+  public type QueryOrderResp = {
+    page : Nat;
+    total : Int;
+    hasmore : Bool;
+    data : [QueryOrder];
+  };
+
   public type TransferArgs = {
     to : Blob;
     memo : Nat64;
@@ -239,7 +264,24 @@ module {
       pid = p.pid;
       subType = p.subType;
       expireTime = p.expireTime / 1_000_000;
+      created = p.created;
       isblack = isblack;
+    };
+  };
+
+  public func toQueryOrder(p : PayOrder, to : Blob) : QueryOrder {
+    {
+      id = p.id;
+      from = p.from;
+      to = to;
+      amount = p.amount;
+      paytype = p.paytype;
+      source = p.source;
+      token = p.token;
+      amountPaid = p.amountPaid;
+      status = p.status;
+      verifiedTime = p.verifiedTime;
+      sharedTime = p.sharedTime;
     };
   };
 
