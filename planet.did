@@ -74,6 +74,11 @@ type QueryDetailResp =
          content: text;
        };
  };
+type QueryCommonSubscriber = 
+ record {
+   data: opt QuerySubcriber;
+   issubscriber: bool;
+ };
 type QueryCommonReq = 
  record {
    page: nat;
@@ -146,11 +151,14 @@ type QueryArticle =
    author: principal;
    cate: nat;
    comment: nat;
+   commentNew: nat;
    commentTotal: nat;
    copyright: opt text;
    created: int;
+   fromurl: text;
    id: text;
    like: nat;
+   original: bool;
    status: ArticleStatus;
    subcate: nat;
    tags: vec text;
@@ -181,6 +189,7 @@ type PlanetInfo =
    payee: opt blob;
    permission: PermissionType;
    subcriber: nat;
+   subcriber_new: nat;
    subcribers: vec QuerySubcriber;
    subprices: vec SubcribePrice;
    twitter: text;
@@ -220,6 +229,7 @@ type Planet =
    adminReplyComment: (nat, CommentArgs) -> (OpResult);
    adminShowComment: (nat, bool) -> (bool);
    adminSubcribers: (QueryCommonReq) -> (QuerySubcriberResp) query;
+   cancelThumbsup: (text, opt nat) -> (OpResult);
    canisterAccount: () -> (AccountIdentifier) query;
    canisterBalance: () -> (Tokens);
    canisterMemory: () -> (nat) query;
@@ -229,12 +239,15 @@ type Planet =
    getPlanetBase: () -> (PlanetBase) query;
    getPlanetInfo: () -> (PlanetInfo) query;
    getSelfSubcriber: () -> (QuerySelfSubscriber) query;
+   isSubscriber: (principal) -> (QueryCommonSubscriber) query;
    preSubscribe: (text, SubcribePrice) -> (PayResp);
    queryArticle: (text) -> (QueryDetailResp) query;
    queryArticles: (QueryArticleReq) -> (QueryArticleResp) query;
    queryComments: (QueryCommentReq) -> (QueryCommentResp) query;
    queryOrders: (QueryCommonReq) -> (QueryOrderResp) query;
    removeBlackUser: (principal) -> (bool);
+   resetArticleCommentNew: (text) -> (bool);
+   resetSubscriberNew: () -> (bool);
    setAvatar: (text) -> (bool);
    setCanIndex: (bool) -> (bool);
    setCategorys: (vec QueryCategory) -> (bool);
@@ -248,6 +261,7 @@ type Planet =
    setTwitter: (text) -> (bool);
    setWriters: (vec principal) -> (bool);
    subscribe: (nat64) -> (bool);
+   thumbsup: (text, opt nat) -> (OpResult);
    topedArticle: (text, bool) -> (OpResult);
    transferSubscribe: (principal) -> (bool);
    unsubscribe: () -> (bool);
@@ -340,7 +354,9 @@ type ArticleArgs =
    atype: ArticleType;
    cate: nat;
    content: text;
+   fromurl: text;
    id: text;
+   original: bool;
    status: ArticleStatus;
    subcate: nat;
    tags: vec text;

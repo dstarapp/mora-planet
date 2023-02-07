@@ -2,6 +2,7 @@ import Buffer "mo:base/Buffer";
 import Debug "mo:base/Debug";
 import Types "./types";
 import Ulid "mo:ulid/ULID";
+import Bool "mo:base/Bool";
 
 module {
 
@@ -13,7 +14,7 @@ module {
   type SubcribePrice = Types.SubcribePrice;
   type Subcriber = Types.Subcriber;
   type Category = Types.Category;
-  type Article = Types.Article;
+  type Article_V1 = Types.Article_V1;
   type Comment = Types.Comment;
   type PayOrder = Types.PayOrder;
 
@@ -80,6 +81,7 @@ module {
     writers : [Principal];
     subprices : [Types.SubcribePrice];
     subcriber : Nat;
+    subcriber_new : Nat;
     article : Nat;
     income : Nat64;
     canister : Principal;
@@ -102,6 +104,8 @@ module {
     subcate : Nat;
     status : ArticleStatus;
     allowComment : Bool;
+    original : Bool;
+    fromurl : Text;
     tags : [Text];
   };
 
@@ -124,6 +128,9 @@ module {
     view : Nat64;
     comment : Nat;
     commentTotal : Nat;
+    commentNew : Nat;
+    original : Bool;
+    fromurl : Text;
     tags : [Text];
     copyright : ?Text;
   };
@@ -216,6 +223,11 @@ module {
     isblack : Bool;
   };
 
+  public type QueryCommonSubscriber = {
+    data : ?QuerySubcriber;
+    issubscriber : Bool;
+  };
+
   public type QueryOrder = {
     id : Nat64;
     from : Principal;
@@ -253,10 +265,10 @@ module {
             children.add({ id = c2.id; name = c2.name; children = [] });
           };
         };
-        ret.add({ id = cat.id; name = cat.name; children = children.toArray() });
+        ret.add({ id = cat.id; name = cat.name; children = Buffer.toArray(children) });
       };
     };
-    return ret.toArray();
+    return Buffer.toArray(ret);
   };
 
   public func toQuerySubcriber(p : Subcriber, isblack : Bool) : QuerySubcriber {
@@ -264,7 +276,7 @@ module {
       pid = p.pid;
       subType = p.subType;
       expireTime = p.expireTime / 1_000_000;
-      created = p.created;
+      created = p.created / 1_000_000;
       isblack = isblack;
     };
   };
@@ -285,7 +297,7 @@ module {
     };
   };
 
-  public func toQueryArticle(p : Article) : QueryArticle {
+  public func toQueryArticle(p : Article_V1) : QueryArticle {
     {
       id = Ulid.toText(p.id);
       atype = p.atype;
@@ -305,6 +317,9 @@ module {
       view = p.view;
       comment = p.comment;
       commentTotal = p.commentTotal;
+      commentNew = p.commentNew;
+      original = p.original;
+      fromurl = p.fromurl;
       tags = p.tags;
       copyright = p.copyright;
     };

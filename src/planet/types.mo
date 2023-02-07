@@ -3,6 +3,7 @@ import Int "mo:base/Int";
 import Buffer "mo:base/Buffer";
 import Hash "mo:base/Hash";
 import Text "mo:base/Text";
+import Nat "mo:base/Nat";
 import Nat64 "mo:base/Nat64";
 import Ulid "mo:ulid/ULID";
 import Order "mo:base/Order";
@@ -27,7 +28,7 @@ module {
 
   public type SubcribePrice = {
     subType : SubcribeType;
-    price : Nat;
+    price : Nat; // 4 decimals
   };
 
   public type Subcriber = {
@@ -59,7 +60,7 @@ module {
     #Photos;
   };
 
-  public type Article = {
+  public type Article_V1 = {
     id : Ulid.ULID;
     atype : ArticleType;
     var title : Text;
@@ -79,6 +80,9 @@ module {
     var view : Nat64;
     var comment : Nat;
     var commentTotal : Nat;
+    var commentNew : Nat;
+    var original : Bool;
+    var fromurl : Text;
     var tags : [Text];
     var version : Nat;
     var copyright : ?Text;
@@ -190,7 +194,8 @@ module {
   public func typeExpiredTime(a : SubcribeType) : Int {
     switch (a) {
       case (#Free) {
-        return 0;
+        // return 0;
+        return (500 * 360 * 86400) * 1_000_000_000;
       };
       case (#Day30) {
         return (30 * 86400) * 1_000_000_000;
@@ -213,12 +218,37 @@ module {
     };
   };
 
+  public func calcNextSubscriber(sb : Subcriber, newType : SubcribeType) : Subcriber {
+    if (newType == #Free) {
+      sb.subType := #Free;
+      sb.expireTime := Time.now() + typeExpiredTime(#Free);
+    } else {
+      if (sb.subType == #Free) {
+        sb.subType := nextType(sb.subType, newType);
+        sb.expireTime := Time.now() + typeExpiredTime(#Free);
+        // free is Permanent time
+      } else {
+        sb.subType := nextType(sb.subType, newType);
+        if (sb.expireTime < Time.now()) {
+          sb.expireTime := Time.now() + typeExpiredTime(sb.subType);
+        } else {
+          sb.expireTime := sb.expireTime + typeExpiredTime(sb.subType);
+        };
+      };
+    };
+    sb;
+  };
+
   public func nat32hash(n : Nat32) : Hash.Hash {
     return n;
   };
 
   public func nat64hash(n : Nat64) : Hash.Hash {
     return Text.hash(Nat64.toText(n));
+  };
+
+  public func nathash(n : Nat) : Hash.Hash {
+    return Text.hash(Nat.toText(n));
   };
 
   public func compareArticleDesc(a : SortArticle, b : SortArticle) : Order.Order {
@@ -233,7 +263,7 @@ module {
   };
 
   // 1 6 5 4 3 2 0
-  public func beforeCreated(a : Article, b : Article) : Bool {
+  public func beforeCreated(a : Article_V1, b : Article_V1) : Bool {
     if (b.toped > 0) {
       return false;
     };

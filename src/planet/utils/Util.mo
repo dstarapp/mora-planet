@@ -18,7 +18,7 @@ module {
     Array.tabulate(
       32,
       func(i : Nat) : Nat8 {
-        if (i >= p.size() + 1) 0 else if (i == 0)(Nat8.fromNat(p.size())) else (p[i - 1]);
+        if (i >= p.size() + 1) 0 else if (i == 0) (Nat8.fromNat(p.size())) else (p[i - 1]);
       },
     );
   };
@@ -32,7 +32,7 @@ module {
     // Counter as Nonce
     let idBytes = Buffer.Buffer<Nat8>(8);
     NatX.encodeNat64(idBytes, payid, #msb);
-    idHash.write(idBytes.toArray());
+    idHash.write(Buffer.toArray(idBytes));
     // Principal of caller
     idHash.write(Blob.toArray(Principal.toBlob(caller)));
 

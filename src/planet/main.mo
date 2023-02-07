@@ -28,6 +28,8 @@ import Ledger "./utils/Ledger";
 import Query "./query";
 import Users "./utils/Users";
 import Option "mo:base/Option";
+import Likes "./utils/Likes";
+import Oracle "utils/Oracle";
 
 shared ({ caller }) actor class Planet(
   _owner : Principal,
@@ -40,7 +42,7 @@ shared ({ caller }) actor class Planet(
   type PermissionType = Types.PermissionType;
   type SubcribePrice = Types.SubcribePrice;
   type Category = Types.Category;
-  type Article = Types.Article;
+  type Article_V1 = Types.Article_V1;
   type Comment = Types.Comment;
   type Subcriber = Types.Subcriber;
   type PayInfo = Types.PayInfo;
@@ -80,11 +82,12 @@ shared ({ caller }) actor class Planet(
   private stable var desc : Text = _desc;
   private stable var cover : Text = "";
   private stable var totalIncome : Nat64 = 0;
+  private stable var subscriberNew : Nat = 0;
   private stable var payee : ?Ledger.AccountIdentifier = null;
   private stable var lang : Text = "";
   private stable var canIndex : Bool = true;
   private stable var argeePayee : ArgeeSharePay = {
-    ratio = 1;
+    ratio = 3;
     to = _agree;
     remark = "AGREEMENT";
   };
@@ -96,7 +99,7 @@ shared ({ caller }) actor class Planet(
   private stable var cateindex : Nat = 0;
   private stable var commentindex : Nat = 0;
   private stable var payindex = Prim.intToNat64Wrap(Time.now() / 1_000_000);
-  private stable var articles : DQueue<Article> = DQueue.empty();
+  private stable var articles_v1 : DQueue<Article_V1> = DQueue.empty();
   private stable var comments : DQueue<Comment> = DQueue.empty();
   private stable var subcribers : DQueue<Subcriber> = DQueue.empty();
   private stable var allTxs : DQueue<PayOrder> = DQueue.empty();
@@ -112,6 +115,8 @@ shared ({ caller }) actor class Planet(
   private let ulse = Source.Source(xorr, 0);
   private let ledger : Ledger.Self = actor (Config.LEDGER_CANISTER_ID);
   private let userserver : Users.Self = actor (Config.USERS_CANISTER_ID);
+  private let likeserver : Likes.Self = actor (Config.LIKES_CANISTER_ID);
+  private let oracleserver : Oracle.ICOracle = actor (Config.ORACLE_CANISTER_ID);
   private let FEE : Nat64 = 10000;
 
   system func preupgrade() {};
@@ -120,6 +125,40 @@ shared ({ caller }) actor class Planet(
     for (bl in DQueue.toIter(blacks)) {
       blackMap.put(bl.pid, true);
     };
+
+    //just fix to v1
+    // for (article in DQueue.toIter(articles)) {
+    //   let article_v1 : Article_V1 = {
+    //     id = article.id;
+    //     atype = article.atype;
+    //     var title = article.title;
+    //     var thumb = article.thumb;
+    //     author = article.author;
+    //     var abstract = article.abstract;
+    //     var content = article.content;
+    //     var cate = article.cate;
+    //     var subcate = article.subcate;
+    //     var created = article.created;
+    //     var updated = article.updated;
+    //     var toped = article.toped;
+    //     var status = article.status;
+    //     var allowComment = article.allowComment;
+    //     var like = article.like;
+    //     var unlike = article.unlike;
+    //     var view = article.view;
+    //     var comment = article.comment;
+    //     var commentTotal = article.commentTotal;
+    //     var commentNew = 0;
+    //     var original = true;
+    //     var fromurl = "";
+    //     var tags = article.tags;
+    //     var version = 0;
+    //     var copyright = null;
+    //   };
+
+    //   ignore DQueue.pushBack(articles_v1, article_v1);
+    // };
+    // articles := DQueue.empty();
   };
 
   //return cycles balance
@@ -218,6 +257,30 @@ shared ({ caller }) actor class Planet(
     return checkSubcriber(id);
   };
 
+  // check issubcriber common
+  public query func isSubscriber(user : Principal) : async Query.QueryCommonSubscriber {
+    switch (findBlackUser(user)) {
+      case (?val) {};
+      case (_) {
+        let now = Time.now();
+        for (item in DQueue.toIter(subcribers)) {
+          if (Principal.equal(user, item.pid)) {
+            if (item.subType == #Free or item.expireTime > now) {
+              return {
+                data = ?Query.toQuerySubcriber(item, false);
+                issubscriber = false;
+              };
+            };
+          };
+        };
+      };
+    };
+    return {
+      data = null;
+      issubscriber = false;
+    };
+  };
+
   public query ({ caller }) func getPlanetBase() : async PlanetBase {
     var topsubcribers = Buffer.Buffer<QuerySubcriber>(0);
     var count = 0;
@@ -229,7 +292,7 @@ shared ({ caller }) actor class Planet(
       topsubcribers.add(Query.toQuerySubcriber(sb, isBlackUser(sb.pid)));
     };
 
-    let stat = statAdminArticleIter(caller, false, DQueue.toIter(articles));
+    let stat = statAdminArticleIter(caller, false, DQueue.toIter(articles_v1));
 
     return {
       owner = owner;
@@ -243,8 +306,8 @@ shared ({ caller }) actor class Planet(
       canindex = canIndex;
       created = created / 1_000_000;
       subprices = subprices;
-      subcribers = topsubcribers.toArray();
-      subcriber = DQueue.size(subcribers);
+      subcribers = Buffer.toArray(topsubcribers);
+      subcriber = countSubscriber();
       article = stat.total;
       income = totalIncome;
       canister = Principal.fromActor(this);
@@ -266,7 +329,7 @@ shared ({ caller }) actor class Planet(
       topsubcribers.add(Query.toQuerySubcriber(sb, isBlackUser(sb.pid)));
     };
 
-    let stat = statAdminArticleIter(caller, true, DQueue.toIter(articles));
+    let stat = statAdminArticleIter(caller, true, DQueue.toIter(articles_v1));
 
     return {
       owner = owner;
@@ -282,12 +345,13 @@ shared ({ caller }) actor class Planet(
       created = created / 1_000_000;
       writers = writers;
       subprices = subprices;
-      subcriber = DQueue.size(subcribers);
+      subcriber = countSubscriber();
+      subcriber_new = subscriberNew;
       article = stat.total;
       income = totalIncome;
       canister = Principal.fromActor(this);
       categorys = Query.toQueryCategory(categorys);
-      subcribers = topsubcribers.toArray();
+      subcribers = Buffer.toArray(topsubcribers);
       last24subcriber = calcLast24Count();
       memory = Prim.rts_memory_size();
       url = customurl;
@@ -325,7 +389,7 @@ shared ({ caller }) actor class Planet(
     assert (checkPoster(caller));
     //
     let res = limitAdminArticle(caller, req);
-    let stat = statAdminArticleIter(caller, true, DQueue.toIter(articles));
+    let stat = statAdminArticleIter(caller, true, DQueue.toIter(articles_v1));
 
     return {
       page = req.page;
@@ -373,7 +437,7 @@ shared ({ caller }) actor class Planet(
   public query ({ caller }) func queryArticles(req : QueryArticleReq) : async QueryArticleResp {
     let res = limitQueryArticle(caller, req);
 
-    let stat = statAdminArticleIter(caller, false, DQueue.toIter(articles));
+    let stat = statAdminArticleIter(caller, false, DQueue.toIter(articles_v1));
 
     return {
       page = req.page;
@@ -604,6 +668,12 @@ shared ({ caller }) actor class Planet(
     return true;
   };
 
+  public shared ({ caller }) func resetSubscriberNew() : async Bool {
+    assert (caller == owner);
+    subscriberNew := 0;
+    return true;
+  };
+
   public shared ({ caller }) func addBlackUser(p : Principal) : async Bool {
     assert (caller == owner);
     switch (findBlackUser(p)) {
@@ -660,7 +730,7 @@ shared ({ caller }) actor class Planet(
   // set all categorys
   public shared ({ caller }) func setCategorys(cates : [Query.QueryCategory]) : async Bool {
     assert (caller == owner);
-    var catemap : HashMap.HashMap<Nat, Bool> = HashMap.HashMap<Nat, Bool>(0, Nat.equal, Hash.hash);
+    var catemap : HashMap.HashMap<Nat, Bool> = HashMap.HashMap<Nat, Bool>(0, Nat.equal, Types.nathash);
     for (cate in categorys.vals()) {
       catemap.put(cate.id, true);
     };
@@ -673,7 +743,11 @@ shared ({ caller }) actor class Planet(
     assert (checkPoster(caller));
     // articleindex := articleindex + 1;
 
-    let article : Article = {
+    if (not p.original and Text.size(Text.trim(p.fromurl, #char(' '))) == 0) {
+      return #Err("article is not original, fromurl must be not empty");
+    };
+
+    let article : Article_V1 = {
       id = ulse.new();
       atype = p.atype;
       var title = p.title;
@@ -693,12 +767,15 @@ shared ({ caller }) actor class Planet(
       var view = 0;
       var comment = 0;
       var commentTotal = 0;
+      var commentNew = 0;
+      var original = p.original;
+      var fromurl = p.fromurl;
       var tags = p.tags;
       var version = 0;
       var copyright = null;
     };
 
-    ignore DQueue.pushFront(article, articles);
+    ignore DQueue.pushFront(article, articles_v1);
 
     return #Ok({ data = Ulid.toText(article.id) });
   };
@@ -709,6 +786,11 @@ shared ({ caller }) actor class Planet(
     // must check writer
     switch (findArticle(p.id)) {
       case (?article) {
+
+        if (not p.original and Text.size(Text.trim(p.fromurl, #char(' '))) == 0) {
+          return #Err("article is not original, fromurl must be not empty");
+        };
+
         let status = article.status;
         article.title := p.title;
         article.thumb := p.thumb;
@@ -721,12 +803,14 @@ shared ({ caller }) actor class Planet(
         article.tags := p.tags;
         article.content := p.content;
         article.updated := Time.now();
+        article.original := p.original;
+        article.fromurl := p.fromurl;
         if (status == #Draft and p.status != #Draft) {
           article.created := Time.now();
 
           // top must be front.
-          ignore DQueue.remove(articles, eqUlid(p.id));
-          ignore DQueue.pushFront(article, articles);
+          ignore DQueue.remove(articles_v1, eqUlid(p.id));
+          ignore DQueue.pushFront(article, articles_v1);
         };
         return #Ok({ data = p.id });
       };
@@ -748,14 +832,14 @@ shared ({ caller }) actor class Planet(
           article.toped := Time.now();
 
           // top must be front.
-          ignore DQueue.remove(articles, eqUlid(aid));
-          ignore DQueue.pushFront(article, articles);
+          ignore DQueue.remove(articles_v1, eqUlid(aid));
+          ignore DQueue.pushFront(article, articles_v1);
         } else if (article.toped != 0) {
           article.toped := 0;
 
           // insert
-          ignore DQueue.remove(articles, eqUlid(aid));
-          ignore DQueue.insert_before(article, articles, Type.beforeCreated);
+          ignore DQueue.remove(articles_v1, eqUlid(aid));
+          ignore DQueue.insert_before(article, articles_v1, Type.beforeCreated);
         };
         return #Ok({ data = aid });
       };
@@ -790,6 +874,20 @@ shared ({ caller }) actor class Planet(
   public shared ({ caller }) func copyright(aid : Text) : async Bool {
     // assert(checkPoster(caller)); // must check writer
     return false;
+  };
+
+  public shared ({ caller }) func resetArticleCommentNew(aid : Text) : async Bool {
+    assert (checkPoster(caller));
+    // must check writer
+    switch (findArticle(aid)) {
+      case (?article) {
+        article.commentNew := 0;
+        return true;
+      };
+      case (_) {
+        return false;
+      };
+    };
   };
 
   public shared ({ caller }) func adminReplyComment(cid : Nat, comment : CommentArgs) : async OpResult {
@@ -864,6 +962,7 @@ shared ({ caller }) actor class Planet(
         };
         ignore DQueue.pushFront(add, comments);
         article.commentTotal := article.commentTotal + 1;
+        article.commentNew := article.commentNew + 1;
 
         return #Ok({ data = debug_show (add.id) });
       };
@@ -872,6 +971,105 @@ shared ({ caller }) actor class Planet(
       };
     };
     return #Err("not support");
+  };
+
+  public shared ({ caller }) func thumbsup(aid : Text, cid : ?Nat) : async OpResult {
+
+    if (isBlackUser(caller)) {
+      return #Err("no permission to comment this article!");
+    };
+
+    switch (findArticle(aid)) {
+      case (?article) {
+        switch (cid) {
+          case (?id) {
+            switch (findCommentOrReply(id)) {
+              case (?comment) {
+                let keyid = aid # "_" # debug_show (id);
+                let ret = await Likes.thumbsup(likeserver, Principal.fromActor(this), keyid, caller);
+                if (ret) {
+                  switch (comment.reply) {
+                    case (?reply) {
+                      if (reply.id == id) {
+                        reply.like := reply.like + 1;
+                      } else {
+                        comment.like := comment.like + 1;
+                      };
+                    };
+                    case (_) {
+                      comment.like := comment.like + 1;
+                    };
+                  };
+                };
+                return #Ok({ data = debug_show (ret) });
+              };
+              case (_) {
+                return #Err("comment id not exist");
+              };
+            };
+          };
+          case (_) {
+            let ret = await Likes.thumbsup(likeserver, Principal.fromActor(this), aid, caller);
+            if (ret) {
+              article.like := article.like + 1;
+            };
+            return #Ok({ data = debug_show (ret) });
+          };
+        };
+      };
+      case (_) {
+        return #Err("article id not exist");
+      };
+    };
+  };
+
+  public shared ({ caller }) func cancelThumbsup(aid : Text, cid : ?Nat) : async OpResult {
+    if (isBlackUser(caller)) {
+      return #Err("no permission to comment this article!");
+    };
+
+    switch (findArticle(aid)) {
+      case (?article) {
+        switch (cid) {
+          case (?id) {
+            switch (findCommentOrReply(id)) {
+              case (?comment) {
+                let keyid = aid # "_" # debug_show (id);
+                let ret = await Likes.cancelThumbsup(likeserver, Principal.fromActor(this), keyid, caller);
+                if (ret) {
+                  switch (comment.reply) {
+                    case (?reply) {
+                      if (reply.id == id) {
+                        reply.like := reply.like - 1;
+                      } else {
+                        comment.like := comment.like - 1;
+                      };
+                    };
+                    case (_) {
+                      comment.like := comment.like - 1;
+                    };
+                  };
+                };
+                return #Ok({ data = debug_show (ret) });
+              };
+              case (_) {
+                return #Err("comment id not exist");
+              };
+            };
+          };
+          case (_) {
+            let ret = await Likes.cancelThumbsup(likeserver, Principal.fromActor(this), aid, caller);
+            if (ret) {
+              article.like := article.like - 1;
+            };
+            return #Ok({ data = debug_show (ret) });
+          };
+        };
+      };
+      case (_) {
+        return #Err("article id not exist");
+      };
+    };
   };
 
   // pre subcribe , generate payment order
@@ -912,9 +1110,17 @@ shared ({ caller }) actor class Planet(
 
         if (not has) {
           return #Err("not find subscribe type: " # debug_show (price.subType));
-        }
+        };
         //calc amount usd to icp amount
-        // test
+        let icprate = await Oracle.getIcp2Usd(oracleserver);
+        switch (icprate) {
+          case (?rate) {
+            amount := Nat64.fromNat((amount_usd * (10 ** (rate.decimals - 4)) * 100_000_000) / rate.rate);
+          };
+          case (_) {
+            return #Err("Error: ICOracle canister is offline service");
+          };
+        };
       };
     };
 
@@ -970,6 +1176,7 @@ shared ({ caller }) actor class Planet(
   public shared ({ caller }) func unsubscribe() : async Bool {
     assert (not Principal.isAnonymous(caller));
     if (not checkSubcriber(caller)) {
+      ignore userserver.notify_planet_msg({ msg_type = #unsubscribe; user = caller; data = null });
       return false;
     };
 
@@ -1010,10 +1217,10 @@ shared ({ caller }) actor class Planet(
     };
     switch (req.sort) {
       case (#TimeDesc) {
-        return limitAdminArticleIter(caller, true, req, DQueue.toIter(articles));
+        return limitAdminArticleIter(caller, true, req, DQueue.toIter(articles_v1));
       };
       case (_) {
-        return limitAdminArticleIter(caller, true, req, DQueue.toReverseIter(articles));
+        return limitAdminArticleIter(caller, true, req, DQueue.toReverseIter(articles_v1));
       };
     };
   };
@@ -1021,10 +1228,10 @@ shared ({ caller }) actor class Planet(
   private func limitQueryArticle(caller : Principal, req : QueryArticleReq) : (Int, Bool, [QueryArticle]) {
     switch (req.sort) {
       case (#TimeDesc) {
-        return limitAdminArticleIter(caller, false, req, DQueue.toIter(articles));
+        return limitAdminArticleIter(caller, false, req, DQueue.toIter(articles_v1));
       };
       case (_) {
-        return limitAdminArticleIter(caller, false, req, DQueue.toReverseIter(articles));
+        return limitAdminArticleIter(caller, false, req, DQueue.toReverseIter(articles_v1));
       };
     };
   };
@@ -1065,7 +1272,7 @@ shared ({ caller }) actor class Planet(
     if (total >= start + size) {
       hasmore := true;
     };
-    return (total, hasmore, data.toArray());
+    return (total, hasmore, Buffer.toArray(data));
   };
 
   private func limitSubcribers(caller : Principal, req : QueryCommonReq) : (Int, Bool, [QuerySubcriber]) {
@@ -1093,7 +1300,7 @@ shared ({ caller }) actor class Planet(
     if (total >= start + size) {
       hasmore := true;
     };
-    return (total, hasmore, data.toArray());
+    return (total, hasmore, Buffer.toArray(data));
   };
 
   private func limitOrders(caller : Principal, req : QueryCommonReq) : (Int, Bool, [QueryOrder]) {
@@ -1124,10 +1331,10 @@ shared ({ caller }) actor class Planet(
     if (total >= start + size) {
       hasmore := true;
     };
-    return (total, hasmore, data.toArray());
+    return (total, hasmore, Buffer.toArray(data));
   };
 
-  private func statAdminArticleIter(caller : Principal, admin : Bool, iter : Iter.Iter<Article>) : ArticleStat {
+  private func statAdminArticleIter(caller : Principal, admin : Bool, iter : Iter.Iter<Article_V1>) : ArticleStat {
     var total = 0;
     var subcribe = 0;
     var pub = 0;
@@ -1141,7 +1348,7 @@ shared ({ caller }) actor class Planet(
 
     Iter.iterate(
       iter,
-      func(x : Article, idx : Int) {
+      func(x : Article_V1, idx : Int) {
         if (x.status == #Delete) {
           return;
         };
@@ -1187,7 +1394,7 @@ shared ({ caller }) actor class Planet(
     };
   };
 
-  private func limitAdminArticleIter(caller : Principal, admin : Bool, req : QueryArticleReq, iter : Iter.Iter<Article>) : (Int, Bool, [QueryArticle]) {
+  private func limitAdminArticleIter(caller : Principal, admin : Bool, req : QueryArticleReq, iter : Iter.Iter<Article_V1>) : (Int, Bool, [QueryArticle]) {
     var data = Buffer.Buffer<QueryArticle>(0);
     let pagesize = checkPageSize(req.page, req.size);
     let size = pagesize.1;
@@ -1204,7 +1411,7 @@ shared ({ caller }) actor class Planet(
 
     Iter.iterate(
       iter,
-      func(x : Article, idx : Int) {
+      func(x : Article_V1, idx : Int) {
         // Debug.print("article id: " # Ulid.toText(x.id));
         if (x.toped != 0) {
           return;
@@ -1221,7 +1428,7 @@ shared ({ caller }) actor class Planet(
     if (total >= start + size) {
       hasmore := true;
     };
-    return (total, hasmore, data.toArray());
+    return (total, hasmore, Buffer.toArray(data));
   };
 
   private func limitTopArticleIter(caller : Principal, admin : Bool, req : QueryArticleReq, data : Buffer.Buffer<QueryArticle>) : (Int, Bool) {
@@ -1232,8 +1439,8 @@ shared ({ caller }) actor class Planet(
     var hasmore = false;
 
     Iter.iterate(
-      DQueue.toIter(articles),
-      func(x : Article, idx : Int) {
+      DQueue.toIter(articles_v1),
+      func(x : Article_V1, idx : Int) {
         if (x.toped == 0) {
           return;
         };
@@ -1294,10 +1501,10 @@ shared ({ caller }) actor class Planet(
     if (total >= start + size) {
       hasmore := true;
     };
-    return (total, hasmore, data.toArray());
+    return (total, hasmore, Buffer.toArray(data));
   };
 
-  private func checkQuery(caller : Principal, x : Article, admin : Bool, req : QueryArticleReq) : Bool {
+  private func checkQuery(caller : Principal, x : Article_V1, admin : Bool, req : QueryArticleReq) : Bool {
     if (admin) {
       if (not checkOwner(caller)) {
         // only return self created
@@ -1430,7 +1637,7 @@ shared ({ caller }) actor class Planet(
       };
       case (_) {};
     };
-    let now = Time.now() / 1_000_000;
+    let now = Time.now();
     for (item in DQueue.toIter(subcribers)) {
       if (Principal.equal(caller, item.pid)) {
         if (item.subType == #Free or item.expireTime > now) {
@@ -1439,6 +1646,17 @@ shared ({ caller }) actor class Planet(
       };
     };
     false;
+  };
+
+  private func countSubscriber() : Nat {
+    let now = Time.now();
+    var count : Nat = 0;
+    for (item in DQueue.toIter(subcribers)) {
+      if (item.subType == #Free or item.expireTime > now) {
+        count := count + 1;
+      };
+    };
+    return count;
   };
 
   private func accountId(sa : ?[Nat8]) : Ledger.AccountIdentifier {
@@ -1486,12 +1704,9 @@ shared ({ caller }) actor class Planet(
   private func userSubscribe(user : Principal, price : SubcribePrice) : async () {
     switch (findSubcriber(user)) {
       case (?sb) {
-        sb.subType := Types.nextType(sb.subType, price.subType);
-        if (sb.expireTime < Time.now()) {
-          sb.expireTime := Time.now();
-        } else {
-          sb.expireTime := sb.expireTime + Types.typeExpiredTime(sb.subType);
-        };
+        let nsb = Types.calcNextSubscriber(sb, price.subType);
+        sb.subType := nsb.subType;
+        sb.expireTime := nsb.expireTime;
       };
       case (_) {
         ignore DQueue.pushBack(
@@ -1610,15 +1825,31 @@ shared ({ caller }) actor class Planet(
         allcates.add(child);
       };
     };
-    return allcates.toArray();
+    return Buffer.toArray(allcates);
   };
 
-  private func findArticle(aid : Text) : ?Article {
-    DQueue.find(articles, eqUlid(aid));
+  private func findArticle(aid : Text) : ?Article_V1 {
+    DQueue.find(articles_v1, eqUlid(aid));
   };
 
   private func findComment(cid : Nat) : ?Comment {
     DQueue.find(comments, eqId(cid));
+  };
+
+  private func findCommentOrReply(cid : Nat) : ?Comment {
+    DQueue.find(
+      comments,
+      func(x : Comment) : Bool {
+        switch (x.reply) {
+          case (?reply) {
+            return x.id == cid or reply.id == cid;
+          };
+          case (_) {
+            return x.id == cid;
+          };
+        };
+      },
+    );
   };
 
   private func findPayOrder(oid : Nat64) : ?PayOrder {

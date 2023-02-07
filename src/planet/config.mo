@@ -16,4 +16,14 @@ module {
 
   // mainnet moradao
   public let MORADAO_CANISTER_ID = "uzpoe-vyaaa-aaaai-qnkva-cai";
+
+  // local like storage
+  // public let LIKES_CANISTER_ID = "s55qq-oqaaa-aaaaa-aaakq-cai";
+  // mainnet like storage
+  public let LIKES_CANISTER_ID = "2raad-niaaa-aaaai-qntma-cai";
+
+  // local ICOracle
+  // public let ORACLE_CANISTER_ID = "r7inp-6aaaa-aaaaa-aaabq-cai";
+  // mainnet ICOracle
+  public let ORACLE_CANISTER_ID = "bzyza-zaaaa-aaaai-qogkq-cai";
 };
