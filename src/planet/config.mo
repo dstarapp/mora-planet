@@ -12,7 +12,8 @@ module {
   // local user allot
   // public let USERS_CANISTER_ID = "wqmuk-5qaaa-aaaaa-aaaqq-cai";
   // mainnet user allot
-  public let USERS_CANISTER_ID = "v5cbw-myaaa-aaaai-qnkta-cai";
+  // public let USERS_CANISTER_ID = "v5cbw-myaaa-aaaai-qnkta-cai";
+  public let USERS_CANISTER_ID = "w3qlm-giaaa-aaaai-qo5pa-cai";
 
   // mainnet moradao
   public let MORADAO_CANISTER_ID = "uzpoe-vyaaa-aaaai-qnkva-cai";

@@ -194,8 +194,8 @@ module {
   public func typeExpiredTime(a : SubcribeType) : Int {
     switch (a) {
       case (#Free) {
-        // return 0;
-        return (500 * 360 * 86400) * 1_000_000_000;
+        return 0;
+        // return (500 * 360 * 86400) * 1_000_000_000;
       };
       case (#Day30) {
         return (30 * 86400) * 1_000_000_000;
@@ -218,25 +218,29 @@ module {
     };
   };
 
-  public func calcNextSubscriber(sb : Subcriber, newType : SubcribeType) : Subcriber {
-    if (newType == #Free) {
-      sb.subType := #Free;
-      sb.expireTime := Time.now() + typeExpiredTime(#Free);
+  public func calcNextSubscriber(sb : Subcriber, nsb : Subcriber) : Subcriber {
+    if (sb.subType == #Free) {
+      sb.subType := nextType(sb.subType, nsb.subType);
+      sb.expireTime := nsb.expireTime;
     } else {
-      if (sb.subType == #Free) {
-        sb.subType := nextType(sb.subType, newType);
-        sb.expireTime := Time.now() + typeExpiredTime(#Free);
-        // free is Permanent time
+      if (sb.expireTime < Time.now()) {
+        sb.subType := nsb.subType;
+        sb.expireTime := nsb.expireTime;
       } else {
-        sb.subType := nextType(sb.subType, newType);
-        if (sb.expireTime < Time.now()) {
-          sb.expireTime := Time.now() + typeExpiredTime(sb.subType);
-        } else {
-          sb.expireTime := sb.expireTime + typeExpiredTime(sb.subType);
-        };
+        sb.subType := nextType(sb.subType, nsb.subType);
+        sb.expireTime := sb.expireTime + (nsb.expireTime - Time.now());
       };
     };
     sb;
+  };
+
+  public func genSubscriber(user : Principal, price : SubcribePrice) : Subcriber {
+    {
+      pid = user;
+      created = Time.now();
+      var subType = price.subType;
+      var expireTime = Time.now() + typeExpiredTime(price.subType);
+    };
   };
 
   public func nat32hash(n : Nat32) : Hash.Hash {

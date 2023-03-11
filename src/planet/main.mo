@@ -307,7 +307,7 @@ shared ({ caller }) actor class Planet(
       created = created / 1_000_000;
       subprices = subprices;
       subcribers = Buffer.toArray(topsubcribers);
-      subcriber = countSubscriber();
+      subcriber = DQueue.size(subcribers);
       article = stat.total;
       income = totalIncome;
       canister = Principal.fromActor(this);
@@ -345,7 +345,7 @@ shared ({ caller }) actor class Planet(
       created = created / 1_000_000;
       writers = writers;
       subprices = subprices;
-      subcriber = countSubscriber();
+      subcriber = DQueue.size(subcribers);
       subcriber_new = subscriberNew;
       article = stat.total;
       income = totalIncome;
@@ -423,13 +423,13 @@ shared ({ caller }) actor class Planet(
         if (not checkOwner(caller)) {
           // only return self created
           if (not Principal.equal(article.author, caller)) {
-            return #Err("no permission to read this article!");
+            return #Err("Error: no permission to read this article!");
           };
         };
         return #Ok({ article = Query.toQueryArticle(article); content = article.content });
       };
       case (_) {
-        return #Err("article not exist!");
+        return #Err("Error: article not exist!");
       };
     };
   };
@@ -480,7 +480,7 @@ shared ({ caller }) actor class Planet(
         if (article.status == #Private) {
           return #Err("no permission to read this article!");
         };
-        let issubcriber = checkSubcriber(caller);
+        let issubcriber = checkReadSubcriber(caller);
         // subcribe also return list, but not allow read content
         if (not issubcriber and article.status == #Subcribe) {
           return #Ok({ article = Query.toQueryArticle(article); content = "" });
@@ -516,7 +516,7 @@ shared ({ caller }) actor class Planet(
         } else if (article.status == #Private) {
           ok := (not checkOwner(caller) and caller != article.author);
         } else if (article.status == #Subcribe) {
-          ok := (not checkOwner(caller) and caller != article.author and not checkSubcriber(caller));
+          ok := (not checkOwner(caller) and caller != article.author and not checkReadSubcriber(caller));
         };
         if ok {
           return { page = req.page; total = 0; hasmore = false; data = [] };
@@ -744,7 +744,7 @@ shared ({ caller }) actor class Planet(
     // articleindex := articleindex + 1;
 
     if (not p.original and Text.size(Text.trim(p.fromurl, #char(' '))) == 0) {
-      return #Err("article is not original, fromurl must be not empty");
+      return #Err("Error: article is not original, fromurl must be not empty");
     };
 
     let article : Article_V1 = {
@@ -788,7 +788,7 @@ shared ({ caller }) actor class Planet(
       case (?article) {
 
         if (not p.original and Text.size(Text.trim(p.fromurl, #char(' '))) == 0) {
-          return #Err("article is not original, fromurl must be not empty");
+          return #Err("Error: article is not original, fromurl must be not empty");
         };
 
         let status = article.status;
@@ -815,7 +815,7 @@ shared ({ caller }) actor class Planet(
         return #Ok({ data = p.id });
       };
       case (_) {
-        return #Err("article id not exist");
+        return #Err("Error: article id not exist");
       };
     };
   };
@@ -826,7 +826,7 @@ shared ({ caller }) actor class Planet(
     switch (findArticle(aid)) {
       case (?article) {
         if (article.status != #Public) {
-          return #Err("only public article can be top");
+          return #Err("Error: only public article can be top");
         };
         if (toped) {
           article.toped := Time.now();
@@ -844,7 +844,7 @@ shared ({ caller }) actor class Planet(
         return #Ok({ data = aid });
       };
       case (_) {
-        return #Err("article id not exist");
+        return #Err("Error: article id not exist");
       };
     };
     // return #Err("not support");
@@ -894,7 +894,7 @@ shared ({ caller }) actor class Planet(
     switch (findArticle(comment.aid)) {
       case (?article) {
         if (not checkOwner(caller) and caller != article.author) {
-          return #Err("no permission to reply this comment!");
+          return #Err("Error: no permission to reply this comment!");
         };
         switch (findComment(cid)) {
           case (?parent) {
@@ -914,12 +914,12 @@ shared ({ caller }) actor class Planet(
             return #Ok({ data = debug_show (true) });
           };
           case (_) {
-            return #Err("comment id not exist");
+            return #Err("Error: comment id not exist");
           };
         };
       };
       case (_) {
-        return #Err("article id not exist");
+        return #Err("Error: article id not exist");
       };
     };
     // return #Err("not support");
@@ -929,24 +929,24 @@ shared ({ caller }) actor class Planet(
     assert (not Principal.isAnonymous(caller));
 
     if (isBlackUser(caller)) {
-      return #Err("no permission to comment this article!");
+      return #Err("Error: no permission to comment this article!");
     };
 
     switch (findArticle(comment.aid)) {
       case (?article) {
         if (article.status == #Draft or article.status == #Delete) {
-          return #Err("no permission to comment this article!");
+          return #Err("Error: no permission to comment this article!");
         };
         if (not article.allowComment) {
-          return #Err("article is not allow comment.");
+          return #Err("Error: article is not allow comment.");
         };
         if (article.status == #Private) {
-          return #Err("no permission to comment this article!");
+          return #Err("Error: no permission to comment this article!");
         };
-        let issubcriber = checkSubcriber(caller);
+        let issubcriber = checkReadSubcriber(caller);
         // subcribe also return list, but not allow read content
         if (not issubcriber and article.status == #Subcribe) {
-          return #Err("no permission to comment this article!");
+          return #Err("Error: no permission to comment this article!");
         };
         commentindex := commentindex + 1;
         let add : Comment = {
@@ -967,7 +967,7 @@ shared ({ caller }) actor class Planet(
         return #Ok({ data = debug_show (add.id) });
       };
       case (_) {
-        return #Err("article id not exist");
+        return #Err("Error: article id not exist");
       };
     };
     return #Err("not support");
@@ -976,7 +976,7 @@ shared ({ caller }) actor class Planet(
   public shared ({ caller }) func thumbsup(aid : Text, cid : ?Nat) : async OpResult {
 
     if (isBlackUser(caller)) {
-      return #Err("no permission to comment this article!");
+      return #Err("Error: no permission to comment this article!");
     };
 
     switch (findArticle(aid)) {
@@ -1004,7 +1004,7 @@ shared ({ caller }) actor class Planet(
                 return #Ok({ data = debug_show (ret) });
               };
               case (_) {
-                return #Err("comment id not exist");
+                return #Err("Error: comment id not exist");
               };
             };
           };
@@ -1018,14 +1018,14 @@ shared ({ caller }) actor class Planet(
         };
       };
       case (_) {
-        return #Err("article id not exist");
+        return #Err("Error: article id not exist");
       };
     };
   };
 
   public shared ({ caller }) func cancelThumbsup(aid : Text, cid : ?Nat) : async OpResult {
     if (isBlackUser(caller)) {
-      return #Err("no permission to comment this article!");
+      return #Err("Error: no permission to comment this article!");
     };
 
     switch (findArticle(aid)) {
@@ -1053,7 +1053,7 @@ shared ({ caller }) actor class Planet(
                 return #Ok({ data = debug_show (ret) });
               };
               case (_) {
-                return #Err("comment id not exist");
+                return #Err("Error: comment id not exist");
               };
             };
           };
@@ -1067,7 +1067,7 @@ shared ({ caller }) actor class Planet(
         };
       };
       case (_) {
-        return #Err("article id not exist");
+        return #Err("Error: article id not exist");
       };
     };
   };
@@ -1076,10 +1076,10 @@ shared ({ caller }) actor class Planet(
   public shared ({ caller }) func preSubscribe(source : Text, price : Types.SubcribePrice) : async Types.PayResp {
     assert (not Principal.isAnonymous(caller));
     if (checkOwner(caller)) {
-      return #Err("you are the owner");
+      return #Err("Error: you are the owner");
     };
     if (isBlackUser(caller)) {
-      return #Err("not allow to subscribe");
+      return #Err("Error: not allow to subscribe");
     };
 
     let now = Time.now();
@@ -1089,11 +1089,20 @@ shared ({ caller }) actor class Planet(
     var sprice : Types.SubcribePrice = price;
     switch (price.subType) {
       case (#Free) {
-        if (subprices.size() == 0) {
-          amount := 0;
-          sprice := { subType = #Free; price = 0 };
-        } else {
-          return #Err("not allow free subscribe");
+        // if (subprices.size() == 0) {
+        //   amount := 0;
+        //   sprice := { subType = #Free; price = 0 };
+        // } else {
+        //   return #Err("not allow free subscribe");
+        // };
+        switch (findSubcriber(caller)) {
+          case (?sb) {
+            return #Err("Error: you are already a subscriber");
+          };
+          case (_) {
+            amount := 0;
+            sprice := { subType = #Free; price = 0 };
+          };
         };
       };
       case (_) {
@@ -1109,7 +1118,7 @@ shared ({ caller }) actor class Planet(
         };
 
         if (not has) {
-          return #Err("not find subscribe type: " # debug_show (price.subType));
+          return #Err("Error: not find subscribe type: " # debug_show (price.subType));
         };
         //calc amount usd to icp amount
         let icprate = await Oracle.getIcp2Usd(oracleserver);
@@ -1191,6 +1200,10 @@ shared ({ caller }) actor class Planet(
     };
     switch (findSubcriber(caller)) {
       case (?sb) {
+        if (sb.subType == #Free) {
+          // #Free can not transfer
+          return false;
+        };
         // sb.pid := p;
         let nsb : Subcriber = {
           pid = p;
@@ -1198,11 +1211,12 @@ shared ({ caller }) actor class Planet(
           var subType = sb.subType;
           var expireTime = sb.expireTime;
         };
-        ignore DQueue.pushBack(subcribers, nsb);
-        ignore DQueue.removeOne(subcribers, func(x : { pid : Principal }) : Bool { x.pid == caller });
 
-        ignore userserver.notify_planet_msg({ msg_type = #subscribe; user = p; data = null });
-        ignore userserver.notify_planet_msg({ msg_type = #unsubscribe; user = caller; data = null });
+        ignore userUnsubscribe(caller);
+        // ignore DQueue.removeOne(subcribers, func(x : { pid : Principal }) : Bool { x.pid == caller });
+        // ignore userserver.notify_planet_msg({ msg_type = #unsubscribe; user = caller; data = null });
+
+        await userSubscribe(nsb, false);
 
         return true;
       };
@@ -1340,11 +1354,6 @@ shared ({ caller }) actor class Planet(
     var pub = 0;
     var pri = 0;
     var draft = 0;
-    var issubcriber = false;
-
-    if (not admin) {
-      issubcriber := checkSubcriber(caller);
-    };
 
     Iter.iterate(
       iter,
@@ -1648,6 +1657,27 @@ shared ({ caller }) actor class Planet(
     false;
   };
 
+  private func checkReadSubcriber(caller : Principal) : Bool {
+    switch (findBlackUser(caller)) {
+      case (?user) {
+        return false;
+      };
+      case (_) {};
+    };
+    let now = Time.now();
+    for (item in DQueue.toIter(subcribers)) {
+      if (Principal.equal(caller, item.pid)) {
+        if (subprices.size() <= 0) {
+          return true;
+        };
+        if (item.subType != #Free and item.expireTime > now) {
+          return true;
+        };
+      };
+    };
+    false;
+  };
+
   private func countSubscriber() : Nat {
     let now = Time.now();
     var count : Nat = 0;
@@ -1671,7 +1701,7 @@ shared ({ caller }) actor class Planet(
           order.verifiedTime := ?Time.now();
           order.sharedTime := ?Time.now();
 
-          await userSubscribe(order.from, price);
+          await userSubscribe(Types.genSubscriber(order.from, price), true);
           return true;
         };
       };
@@ -1692,7 +1722,7 @@ shared ({ caller }) actor class Planet(
     switch (order.paytype) {
       case (#Price(price)) {
         // user subcribe
-        await userSubscribe(order.from, price);
+        await userSubscribe(Types.genSubscriber(order.from, price), true);
 
         ignore sharePay(order);
       };
@@ -1701,27 +1731,22 @@ shared ({ caller }) actor class Planet(
     return true;
   };
 
-  private func userSubscribe(user : Principal, price : SubcribePrice) : async () {
-    switch (findSubcriber(user)) {
+  private func userSubscribe(usb : Subcriber, isNew : Bool) : async () {
+    switch (findSubcriber(usb.pid)) {
       case (?sb) {
-        let nsb = Types.calcNextSubscriber(sb, price.subType);
+        let nsb = Types.calcNextSubscriber(sb, usb);
         sb.subType := nsb.subType;
         sb.expireTime := nsb.expireTime;
       };
       case (_) {
-        ignore DQueue.pushBack(
-          subcribers,
-          {
-            pid = user;
-            created = Time.now();
-            var subType = price.subType;
-            var expireTime = Time.now() + Types.typeExpiredTime(price.subType);
-          },
-        );
+        ignore DQueue.pushBack(subcribers, usb);
+        if (isNew) {
+          subscriberNew := subscriberNew + 1;
+        };
       };
     };
 
-    ignore userserver.notify_planet_msg({ msg_type = #subscribe; user = user; data = null });
+    ignore userserver.notify_planet_msg({ msg_type = #subscribe; user = usb.pid; data = null });
   };
 
   private func userUnsubscribe(user : Principal) : async Bool {
