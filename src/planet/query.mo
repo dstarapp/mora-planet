@@ -16,7 +16,7 @@ module {
   type Category = Types.Category;
   type Article_V1 = Types.Article_V1;
   type Comment = Types.Comment;
-  type PayOrder = Types.PayOrder;
+  type PayOrder_V1 = Types.PayOrder_V1;
 
   public type QueryCategory = {
     id : Nat;
@@ -236,6 +236,7 @@ module {
     paytype : Types.PayType;
     source : Text;
     token : Text;
+    createdTime : Int;
     amountPaid : Nat64;
     status : Types.PayStatus;
     verifiedTime : ?Int;
@@ -281,7 +282,15 @@ module {
     };
   };
 
-  public func toQueryOrder(p : PayOrder, to : Blob) : QueryOrder {
+  public func toQueryOrder(p : PayOrder_V1, to : Blob) : QueryOrder {
+    let verifiedTime = switch (p.verifiedTime) {
+      case (?v) { ?(v / 1_000_000) };
+      case (_) { null };
+    };
+    let sharedTime = switch (p.sharedTime) {
+      case (?v) { ?(v / 1_000_000) };
+      case (_) { null };
+    };
     {
       id = p.id;
       from = p.from;
@@ -290,10 +299,11 @@ module {
       paytype = p.paytype;
       source = p.source;
       token = p.token;
+      createdTime = p.createdTime / 1_000_000;
       amountPaid = p.amountPaid;
       status = p.status;
-      verifiedTime = p.verifiedTime;
-      sharedTime = p.sharedTime;
+      verifiedTime = verifiedTime;
+      sharedTime = sharedTime;
     };
   };
 

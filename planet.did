@@ -56,6 +56,7 @@ type QueryOrder =
  record {
    amount: nat64;
    amountPaid: nat64;
+   createdTime: int;
    from: principal;
    id: nat64;
    paytype: PayType;
@@ -245,6 +246,7 @@ type Planet =
    queryArticles: (QueryArticleReq) -> (QueryArticleResp) query;
    queryComments: (QueryCommentReq) -> (QueryCommentResp) query;
    queryOrders: (QueryCommonReq) -> (QueryOrderResp) query;
+   refundOrder: (nat64, blob) -> (bool);
    removeBlackUser: (principal) -> (bool);
    resetArticleCommentNew: (text) -> (bool);
    resetSubscriberNew: () -> (bool);
@@ -288,6 +290,8 @@ type PayStatus =
  variant {
    Cancel;
    Paid;
+   Refunded;
+   Timeout;
    Unpaid;
  };
 type PayResp = 
@@ -298,6 +302,7 @@ type PayResp =
 type PayInfo = 
  record {
    amount: nat64;
+   createdTime: int;
    id: nat64;
    paytype: PayType;
    to: blob;

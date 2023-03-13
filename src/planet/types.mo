@@ -117,6 +117,8 @@ module {
     #Unpaid;
     #Paid;
     #Cancel;
+    #Timeout;
+    #Refunded;
   };
 
   public type PayOrder = {
@@ -134,6 +136,22 @@ module {
     var sharedTime : ?Int;
   };
 
+  public type PayOrder_V1 = {
+    id : Nat64;
+    from : Principal;
+    // real dst account
+    amount : Nat64;
+    paytype : PayType;
+    source : Text;
+    token : Text;
+    createdTime : Int;
+    // source from which platform
+    var amountPaid : Nat64;
+    var status : PayStatus;
+    var verifiedTime : ?Int;
+    var sharedTime : ?Int;
+  };
+
   public type PayInfo = {
     id : Nat64;
     // same as memo
@@ -142,6 +160,7 @@ module {
     // canister sub account
     amount : Nat64;
     paytype : PayType;
+    createdTime : Int;
   };
 
   public type PayResp = {
