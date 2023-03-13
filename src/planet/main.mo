@@ -1185,7 +1185,7 @@ shared ({ caller }) actor class Planet(
           token = order.token;
           amount = order.amount;
           paytype = order.paytype;
-          createdTime = order.createdTime;
+          createdTime = order.createdTime / 1_000_000;
           to = accountId(?Util.generateInvoiceSubaccount(caller, order.id));
         };
       },
