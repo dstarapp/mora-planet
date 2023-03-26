@@ -76,6 +76,7 @@ shared ({ caller }) actor class Planet(
 
   type DQueue<T> = DQueue.DQueue<T>;
 
+  private stable var version : Text = "1.0";
   private stable var owner : Principal = _owner;
   private stable var name : Text = _name;
   private stable var avatar : Text = _avatar;
@@ -189,6 +190,11 @@ shared ({ caller }) actor class Planet(
     // allTxs := DQueue.empty();
   };
 
+  //get version
+  public query func get_version() : async Text {
+    return version;
+  };
+
   //return cycles balance
   public query func wallet_balance() : async Nat {
     return Cycles.balance();
@@ -241,7 +247,7 @@ shared ({ caller }) actor class Planet(
         created_at_time = null;
         amount = { e8s = args.amount };
         fee = { e8s = FEE };
-      },
+      }
     );
     if (height == 0) {
       return false;
@@ -1188,7 +1194,7 @@ shared ({ caller }) actor class Planet(
           createdTime = order.createdTime / 1_000_000;
           to = accountId(?Util.generateInvoiceSubaccount(caller, order.id));
         };
-      },
+      }
     );
   };
 
@@ -1227,11 +1233,6 @@ shared ({ caller }) actor class Planet(
   // unsubscribe
   public shared ({ caller }) func unsubscribe() : async Bool {
     assert (not Principal.isAnonymous(caller));
-    if (not checkSubcriber(caller)) {
-      ignore userserver.notify_planet_msg({ msg_type = #unsubscribe; user = caller; data = null });
-      return false;
-    };
-
     return await userUnsubscribe(caller);
   };
 
@@ -1853,7 +1854,10 @@ shared ({ caller }) actor class Planet(
         ignore userserver.notify_planet_msg({ msg_type = #unsubscribe; user = user; data = null });
         return true;
       };
-      case (_) {};
+      case (_) {
+        ignore userserver.notify_planet_msg({ msg_type = #unsubscribe; user = user; data = null });
+        return false;
+      };
     };
     return false;
   };
