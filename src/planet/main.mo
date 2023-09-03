@@ -31,6 +31,8 @@ import Users "./utils/Users";
 import Option "mo:base/Option";
 import Likes "./utils/Likes";
 import Oracle "utils/Oracle";
+import Pay "utils/Pay";
+import ICRC1 "utils/ICRC1";
 
 shared ({ caller }) actor class Planet(
   _owner : Principal,
@@ -52,6 +54,7 @@ shared ({ caller }) actor class Planet(
   type ArgeeSharePay = Types.ArgeeSharePay;
   type SortArticle = Types.SortArticle;
   type BlackUser = Types.BlackUser;
+  type AwardOrder_V1 = Types.AwardOrder_V1;
 
   type ArticleStat = Query.ArticleStat;
   type PlanetInfo = Query.PlanetInfo;
@@ -73,10 +76,14 @@ shared ({ caller }) actor class Planet(
   type QueryDetailResp = Query.QueryDetailResp;
   type QueryOrder = Query.QueryOrder;
   type QueryOrderResp = Query.QueryOrderResp;
+  type QueryAwardReq = Query.QueryAwardReq;
+  type QueryAward = Query.QueryAward;
+  type QueryAwardResp = Query.QueryAwardResp;
 
   type DQueue<T> = DQueue.DQueue<T>;
 
-  private stable var version : Text = "1.0";
+  private let version_now : Text = "1.1";
+  private stable var version : Text = "1.1"; // unused, but still keep, fix from 1.1
   private stable var owner : Principal = _owner;
   private stable var name : Text = _name;
   private stable var avatar : Text = _avatar;
@@ -106,6 +113,8 @@ shared ({ caller }) actor class Planet(
   private stable var subcribers : DQueue<Subcriber> = DQueue.empty();
   private stable var allTxs_v1 : DQueue<PayOrder_V1> = DQueue.empty();
   private stable var blacks : DQueue<BlackUser> = DQueue.empty();
+  private stable var allAwards_v1 : DQueue<AwardOrder_V1> = DQueue.empty();
+  private stable var recoverOwner : ?Principal = null;
 
   // private stable var articleindex: Nat = 0;
   // private var articles : TrieMap.TrieMap<Nat, Article> = TrieMap.TrieMap<Nat, Article>(Nat.equal, Hash.hash);
@@ -127,72 +136,11 @@ shared ({ caller }) actor class Planet(
     for (bl in DQueue.toIter(blacks)) {
       blackMap.put(bl.pid, true);
     };
-
-    //just fix to v1
-    // for (article in DQueue.toIter(articles)) {
-    //   let article_v1 : Article_V1 = {
-    //     id = article.id;
-    //     atype = article.atype;
-    //     var title = article.title;
-    //     var thumb = article.thumb;
-    //     author = article.author;
-    //     var abstract = article.abstract;
-    //     var content = article.content;
-    //     var cate = article.cate;
-    //     var subcate = article.subcate;
-    //     var created = article.created;
-    //     var updated = article.updated;
-    //     var toped = article.toped;
-    //     var status = article.status;
-    //     var allowComment = article.allowComment;
-    //     var like = article.like;
-    //     var unlike = article.unlike;
-    //     var view = article.view;
-    //     var comment = article.comment;
-    //     var commentTotal = article.commentTotal;
-    //     var commentNew = 0;
-    //     var original = true;
-    //     var fromurl = "";
-    //     var tags = article.tags;
-    //     var version = 0;
-    //     var copyright = null;
-    //   };
-
-    //   ignore DQueue.pushBack(articles_v1, article_v1);
-    // };
-    // articles := DQueue.empty();
-
-    //just fix to txs_v1
-    // var idx = DQueue.size(allTxs);
-    // for (order in DQueue.toIter(allTxs)) {
-    //   let id = Int64.toInt(Int64.fromNat64(Nat64.fromNat(idx)));
-    //   let createdTime = switch (order.verifiedTime) {
-    //     case (?t) { t - 6 * 1_000_000_000 };
-    //     case (_) { created + id * 10_000_000_000 };
-    //   };
-
-    //   let order_v1 : PayOrder_V1 = {
-    //     id = order.id;
-    //     from = order.from;
-    //     amount = order.amount;
-    //     paytype = order.paytype;
-    //     source = order.source;
-    //     token = order.token;
-    //     createdTime = createdTime;
-    //     var amountPaid = order.amountPaid;
-    //     var status = order.status;
-    //     var verifiedTime = order.verifiedTime;
-    //     var sharedTime = order.sharedTime;
-    //   };
-    //   ignore DQueue.pushBack(allTxs_v1, order_v1);
-    //   idx := idx - 1;
-    // };
-    // allTxs := DQueue.empty();
   };
 
   //get version
   public query func get_version() : async Text {
-    return version;
+    return version_now;
   };
 
   //return cycles balance
@@ -239,20 +187,24 @@ shared ({ caller }) actor class Planet(
       return false;
     };
 
-    let height = await transfer(
-      {
-        to = args.to;
-        from_subaccount = null;
-        memo = args.memo;
-        created_at_time = null;
-        amount = { e8s = args.amount };
-        fee = { e8s = FEE };
-      }
-    );
+    let height = await transfer({
+      to = args.to;
+      from_subaccount = null;
+      memo = args.memo;
+      created_at_time = null;
+      amount = { e8s = args.amount };
+      fee = { e8s = FEE };
+    });
     if (height == 0) {
       return false;
     };
     return true;
+  };
+
+  public shared ({ caller }) func icrc1_transfer(args : Query.ICRCTransferArgs) : async ICRC1.Result {
+    assert (caller == owner);
+    // let balance = await Pay.balance(args.token, { owner = args.to.owner; subaccount = args.to.subaccount });
+    await Pay.icrc1_transfer(args.token, null, args.to, args.amount);
   };
 
   // verify owner.
@@ -391,6 +343,12 @@ shared ({ caller }) actor class Planet(
       url = customurl;
       articleStat = stat;
     };
+  };
+
+  // get recover owner.
+  public query ({ caller }) func getRecoverOwner() : async ?Principal {
+    assert (checkOwner(caller));
+    return recoverOwner;
   };
 
   public query ({ caller }) func adminBlackUsers(req : QueryCommonReq) : async QueryBlackUserResp {
@@ -582,6 +540,18 @@ shared ({ caller }) actor class Planet(
     };
   };
 
+  public query ({ caller }) func queryAwards(req : QueryAwardReq) : async QueryAwardResp {
+    assert (not Principal.isAnonymous(caller));
+    let res = limitAwardOrders(caller, req);
+
+    return {
+      page = req.page;
+      total = res.0;
+      hasmore = res.1;
+      data = res.2;
+    };
+  };
+
   public query ({ caller }) func getSelfSubcriber() : async Query.QuerySelfSubscriber {
     assert (not Principal.isAnonymous(caller));
     let isblack = isBlackUser(caller);
@@ -627,7 +597,8 @@ shared ({ caller }) actor class Planet(
   };
 
   public shared ({ caller }) func setOwner(p : Principal) : async Bool {
-    assert (caller == owner);
+    // add v1.1, check recover owner
+    assert (caller == owner or isRecoverOwner(caller));
     if (p != owner) {
       // remove old
       ignore userserver.notify_planet_msg({ msg_type = #remove; user = owner; data = null });
@@ -636,6 +607,12 @@ shared ({ caller }) actor class Planet(
       // add new
       ignore userserver.notify_planet_msg({ msg_type = #add; user = owner; data = null });
     };
+    return true;
+  };
+
+  public shared ({ caller }) func setRecoverOwner(p : Principal) : async Bool {
+    assert (caller == owner);
+    recoverOwner := ?p;
     return true;
   };
 
@@ -1184,22 +1161,88 @@ shared ({ caller }) actor class Planet(
 
     ignore DQueue.pushFront(order, allTxs_v1);
     //
-    return #Ok(
-      {
-        invoice = {
-          id = order.id;
-          token = order.token;
-          amount = order.amount;
-          paytype = order.paytype;
-          createdTime = order.createdTime / 1_000_000;
-          to = accountId(?Util.generateInvoiceSubaccount(caller, order.id));
-        };
-      }
-    );
+    return #Ok({
+      invoice = {
+        id = order.id;
+        token = order.token;
+        amount = order.amount;
+        paytype = order.paytype;
+        createdTime = order.createdTime / 1_000_000;
+        to = accountId(?Util.generateInvoiceSubaccount(caller, order.id));
+      };
+    });
   };
 
   // subcribe with pay ID
   public shared ({ caller }) func subscribe(payId : Nat64) : async Bool {
+    assert (not Principal.isAnonymous(caller));
+    switch (findPayOrder(payId)) {
+      case (?order) {
+        if (order.from != caller) {
+          return false;
+        };
+        return await verifyPayorder(order);
+      };
+      case (_) {};
+    };
+    //
+    return false;
+  };
+
+  public shared ({ caller }) func preAward(source : Text, aid : Text, token : Text) : async Types.PayResp {
+    assert (not Principal.isAnonymous(caller));
+    if (checkOwner(caller)) {
+      return #Err("Error: you are the owner");
+    };
+
+    if (token != "ICP" and token != "CKBTC") {
+      return #Err("Error: unsupport token");
+    };
+
+    switch (findArticle(aid)) {
+      case (?article) {};
+      case (_) {
+        return #Err("Error: article not exist!");
+      };
+    };
+
+    let now = Time.now();
+    var sprice : Types.AwardPrice = {
+      aid = aid;
+    };
+
+    // add pay order....
+    let order : PayOrder_V1 = {
+      id = genTxID(now);
+      from = caller;
+      amount = 0;
+      paytype = #Award(sprice);
+      source = source;
+      token = token;
+      createdTime = Time.now();
+      var amountPaid = 0;
+      var status = #Unpaid;
+      var verifiedTime = null;
+      var sharedTime = null;
+    };
+
+    ignore DQueue.pushFront(order, allTxs_v1);
+
+    let invoice_sa = Blob.fromArray(Util.generateInvoiceSubaccount(caller, order.id));
+    let to_address = await Pay.get_address(order.token, { owner = Principal.fromActor(this); subaccount = ?invoice_sa });
+    return #Ok({
+      invoice = {
+        id = order.id;
+        token = order.token;
+        amount = order.amount;
+        paytype = order.paytype;
+        createdTime = order.createdTime / 1_000_000;
+        to = to_address;
+      };
+    });
+  };
+
+  public shared ({ caller }) func confirmAward(payId : Nat64) : async Bool {
     assert (not Principal.isAnonymous(caller));
     switch (findPayOrder(payId)) {
       case (?order) {
@@ -1392,6 +1435,37 @@ shared ({ caller }) actor class Planet(
     return (total, hasmore, Buffer.toArray(data));
   };
 
+  private func limitAwardOrders(caller : Principal, req : QueryAwardReq) : (Int, Bool, [QueryAward]) {
+    var data = Buffer.Buffer<QueryAward>(0);
+    let pagesize = checkPageSize(req.page, req.size);
+    let size = pagesize.1;
+    var start = (pagesize.0 - 1) * size;
+    var hasmore = false;
+    var total = 0;
+
+    var iter : Iter.Iter<AwardOrder_V1> = DQueue.toIter(allAwards_v1);
+    if (req.sort == #TimeAsc) {
+      iter := DQueue.toReverseIter(allAwards_v1);
+    };
+
+    Iter.iterate(
+      iter,
+      func(x : AwardOrder_V1, idx : Int) {
+        if (Ulid.toText(x.aid) != req.aid) {
+          return;
+        };
+        if (total >= start and total < start + size) {
+          data.add(Query.toQueryAward(x));
+        };
+        total := total + 1;
+      },
+    );
+    if (total >= start + size) {
+      hasmore := true;
+    };
+    return (total, hasmore, Buffer.toArray(data));
+  };
+
   private func statAdminArticleIter(caller : Principal, admin : Bool, iter : Iter.Iter<Article_V1>) : ArticleStat {
     var total = 0;
     var subcribe = 0;
@@ -1567,7 +1641,7 @@ shared ({ caller }) actor class Planet(
       };
       if (x.status == #Draft) {
         switch (req.status) {
-          case (?#Draft) {
+          case (? #Draft) {
             return true;
           };
           case (_) {};
@@ -1576,7 +1650,7 @@ shared ({ caller }) actor class Planet(
       };
       if (x.status == #Delete) {
         switch (req.status) {
-          case (?#Delete) {
+          case (? #Delete) {
             return true;
           };
           case (_) {};
@@ -1744,6 +1818,8 @@ shared ({ caller }) actor class Planet(
     if (order.status != #Unpaid) {
       return false;
     };
+
+    order.status := #Verifying;
     // timeout for 15 minutes
     if ((order.createdTime + 900 * 1_000_000_000) < Time.now()) {
       order.status := #Timeout;
@@ -1764,15 +1840,18 @@ shared ({ caller }) actor class Planet(
       case (_) {};
     };
 
-    let to = accountId(?Util.generateInvoiceSubaccount(order.from, order.id));
-    let balance = await ledger.account_balance({ account = to });
+    let sa = Blob.fromArray(Util.generateInvoiceSubaccount(order.from, order.id));
+    let amount = await Pay.balance(order.token, { owner = Principal.fromActor(this); subaccount = ?sa });
 
-    order.amountPaid := balance.e8s;
-    if (balance.e8s < order.amount) {
+    order.amountPaid := amount;
+    if (amount == 0 or amount < order.amount) {
+      order.status := #Unpaid;
       return false;
     };
 
-    totalIncome := totalIncome + balance.e8s;
+    if (order.token == "ICP") {
+      totalIncome := totalIncome + amount;
+    };
     order.status := #Paid;
     order.verifiedTime := ?Time.now();
     switch (order.paytype) {
@@ -1781,6 +1860,10 @@ shared ({ caller }) actor class Planet(
         await userSubscribe(Types.genSubscriber(order.from, price), true);
 
         ignore sharePay(order);
+      };
+      case (#Award(award)) {
+        ignore distributePay(order);
+        return userConfirmAward(order, award);
       };
       case (_) {};
     };
@@ -1801,32 +1884,45 @@ shared ({ caller }) actor class Planet(
     };
 
     let from = Util.generateInvoiceSubaccount(order.from, order.id);
-    let balance = await ledger.account_balance({ account = accountId(?from) });
+    let sa = Blob.fromArray(from);
+    let balance = await Pay.balance(order.token, { owner = Principal.fromActor(this); subaccount = ?sa });
 
-    order.amountPaid := balance.e8s;
-    if (balance.e8s < FEE) {
+    order.amountPaid := balance;
+    if (balance < Pay.token_fee(order.token)) {
       return false;
     };
 
-    let amount = balance.e8s - FEE;
-    // pay to agreement...
-    let refundT : Ledger.TransferArgs = {
-      to = refund_to;
-      fee = { e8s = FEE };
-      memo = 0;
-      amount = { e8s = amount };
-      from_subaccount = ?from;
-      created_at_time = null;
-    };
-
-    let r0 = await transfer(refundT);
-    if (r0 == 0) {
-      return false;
+    let amount = balance - Pay.token_fee(order.token);
+    let ret = await Pay.transfer(order.token, ?from, refund_to, amount);
+    switch (ret) {
+      case (#Err(err)) { return false };
+      case (_) {};
     };
 
     order.status := #Refunded;
     order.verifiedTime := ?Time.now();
     return true;
+  };
+
+  private func userConfirmAward(order : PayOrder_V1, award : Types.AwardPrice) : Bool {
+    switch (findArticle(award.aid)) {
+      case (?article) {
+        // confirm award
+        let aw : AwardOrder_V1 = {
+          id = order.id;
+          aid = article.id;
+          from = order.from;
+          token = order.token;
+          amount = order.amountPaid;
+          createdTime = Time.now();
+        };
+        ignore DQueue.pushFront(aw, allAwards_v1);
+        return true;
+      };
+      case (_) {
+        return false;
+      };
+    };
   };
 
   private func userSubscribe(usb : Subcriber, isNew : Bool) : async () {
@@ -1864,6 +1960,9 @@ shared ({ caller }) actor class Planet(
 
   // share pay to all
   private func sharePay(order : PayOrder_V1) : async Bool {
+    if (order.status != #Paid) {
+      return false;
+    };
     // compute everyone amount
     if (order.sharedTime != null) {
       return false;
@@ -1872,7 +1971,7 @@ shared ({ caller }) actor class Planet(
     let from = Util.generateInvoiceSubaccount(order.from, order.id);
     var amount = order.amountPaid;
     var sharedAmount = (amount * Nat64.fromNat(argeePayee.ratio)) / 100;
-    if (amount < FEE) {
+    if (amount <= FEE) {
       order.sharedTime := ?Time.now();
       return true;
     };
@@ -1896,7 +1995,7 @@ shared ({ caller }) actor class Planet(
     };
 
     amount := amount - sharedAmount;
-    if (amount < FEE) {
+    if (amount <= FEE) {
       order.sharedTime := ?Time.now();
       return true;
     };
@@ -1917,6 +2016,39 @@ shared ({ caller }) actor class Planet(
 
     order.sharedTime := ?Time.now();
     return true;
+  };
+
+  private func distributePay(order : PayOrder_V1) : async Bool {
+    // compute everyone amount
+    if (order.status != #Paid) {
+      return false;
+    };
+
+    if (order.sharedTime != null) {
+      return false;
+    };
+
+    let from = Blob.fromArray(Util.generateInvoiceSubaccount(order.from, order.id));
+    var amount = order.amountPaid;
+    var fee = Pay.token_fee(order.token);
+
+    if (amount <= fee) {
+      order.sharedTime := ?Time.now();
+      return false;
+    };
+
+    amount := amount - fee;
+    let to = { owner = Principal.fromActor(this); subaccount = null };
+    let ret = await Pay.icrc1_transfer(order.token, ?from, to, amount);
+    switch (ret) {
+      case (#Ok(v)) {
+        order.sharedTime := ?Time.now();
+        return true;
+      };
+      case (_) {
+        return false;
+      };
+    };
   };
 
   private func transfer(args : Ledger.TransferArgs) : async Nat64 {
@@ -2018,5 +2150,12 @@ shared ({ caller }) actor class Planet(
 
   private func isBlackUser(user : Principal) : Bool {
     return Option.isSome(blackMap.get(user));
+  };
+
+  private func isRecoverOwner(p : Principal) : Bool {
+    switch (recoverOwner) {
+      case (?v) { return Principal.equal(p, v) };
+      case (_) { return false };
+    };
   };
 };

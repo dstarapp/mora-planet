@@ -2,6 +2,7 @@ import Array "mo:base/Array";
 import Blob "mo:base/Blob";
 import Nat8 "mo:base/Nat8";
 import Nat32 "mo:base/Nat32";
+import Option "mo:base/Option";
 import Principal "mo:base/Principal";
 import Text "mo:base/Text";
 import CRC32 "./CRC32";
@@ -24,12 +25,17 @@ module {
     Blob.fromArrayMut(Array.init(32, 0 : Nat8));
   };
 
-  public func accountIdentifier(principal : Principal, subaccount : Subaccount) : AccountIdentifier {
+  public func accountIdentifier(principal : Principal, subaccount : ?Subaccount) : AccountIdentifier {
+    var sa = defaultSubaccount();
+    switch (subaccount) {
+      case (?_sa) { sa := _sa };
+      case (_) {};
+    };
     let hash = SHA224.Digest();
     hash.write([0x0A]);
     hash.write(Blob.toArray(Text.encodeUtf8("account-id")));
     hash.write(Blob.toArray(Principal.toBlob(principal)));
-    hash.write(Blob.toArray(subaccount));
+    hash.write(Blob.toArray(sa));
     let hashSum = hash.sum();
     let crc32Bytes = beBytes(CRC32.ofArray(hashSum));
     Blob.fromArray(Array.append(crc32Bytes, hashSum));

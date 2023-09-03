@@ -2,6 +2,9 @@ module {
   // mainnet ledger
   public let LEDGER_CANISTER_ID = "ryjl3-tyaaa-aaaaa-aaaba-cai";
 
+  // ckbtc ledger
+  public let CKBTC_LEDGER_CANISTER_ID = "mxzaz-hqaaa-aaaar-qaada-cai";
+
   // mainnet block search
   public let BLOCK_CANISTER_ID = "ockk2-xaaaa-aaaai-aaaua-cai";
 

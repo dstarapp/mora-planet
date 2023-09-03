@@ -7,6 +7,9 @@ import Nat "mo:base/Nat";
 import Nat64 "mo:base/Nat64";
 import Ulid "mo:ulid/ULID";
 import Order "mo:base/Order";
+import Blob "mo:base/Blob";
+import Principal "mo:base/Principal";
+import Account "utils/Account";
 
 module {
 
@@ -36,6 +39,10 @@ module {
     created : Int;
     var subType : SubcribeType;
     var expireTime : Time.Time;
+  };
+
+  public type AwardPrice = {
+    aid : Text;
   };
 
   public type Category = {
@@ -111,6 +118,8 @@ module {
     // subcribe pay type
     #Verify : Bool;
     // verify pay type
+    #Award : AwardPrice;
+    // adward pay type
   };
 
   public type PayStatus = {
@@ -119,6 +128,7 @@ module {
     #Cancel;
     #Timeout;
     #Refunded;
+    #Verifying;
   };
 
   public type PayOrder = {
@@ -166,6 +176,20 @@ module {
   public type PayResp = {
     #Ok : { invoice : PayInfo };
     #Err : Text;
+  };
+
+  // public type Account = {
+  //   owner : Principal;
+  //   subaccount : ?Blob;
+  // };
+
+  public type AwardOrder_V1 = {
+    id : Nat64;
+    aid : Ulid.ULID;
+    from : Principal;
+    token : Text;
+    amount : Nat64;
+    createdTime : Int;
   };
 
   public type ArgeeSharePay = {

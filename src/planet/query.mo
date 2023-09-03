@@ -3,6 +3,9 @@ import Debug "mo:base/Debug";
 import Types "./types";
 import Ulid "mo:ulid/ULID";
 import Bool "mo:base/Bool";
+import Principal "mo:base/Principal";
+import Account "utils/Account";
+import ICRC1 "utils/ICRC1";
 
 module {
 
@@ -17,6 +20,7 @@ module {
   type Article_V1 = Types.Article_V1;
   type Comment = Types.Comment;
   type PayOrder_V1 = Types.PayOrder_V1;
+  type AwardOrder_V1 = Types.AwardOrder_V1;
 
   public type QueryCategory = {
     id : Nat;
@@ -250,10 +254,40 @@ module {
     data : [QueryOrder];
   };
 
+  public type QueryAward = {
+    id : Nat64;
+    aid : Text;
+    from : Principal;
+    token : Text;
+    amount : Nat64;
+    created : Int;
+  };
+
+  public type QueryAwardReq = {
+    aid : Text;
+    page : Nat;
+    size : Nat;
+    sort : QuerySort;
+  };
+
+  public type QueryAwardResp = {
+    page : Nat;
+    total : Int;
+    hasmore : Bool;
+    data : [QueryAward];
+  };
+
   public type TransferArgs = {
     to : Blob;
     memo : Nat64;
     amount : Nat64;
+  };
+
+  public type ICRCTransferArgs = {
+    token : Text;
+    amount : Nat64;
+    to : ICRC1.Account;
+    memo : ?Blob;
   };
 
   public func toQueryCategory(cats : [Category]) : [QueryCategory] {
@@ -353,6 +387,17 @@ module {
       status = p.status;
       created = p.created / 1_000_000;
       reply = reply;
+    };
+  };
+
+  public func toQueryAward(p : AwardOrder_V1) : QueryAward {
+    {
+      id = p.id;
+      aid = Ulid.toText(p.aid);
+      from = p.from;
+      token = p.token;
+      amount = p.amount;
+      created = p.createdTime / 1_000_000;
     };
   };
 };

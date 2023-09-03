@@ -1,3 +1,17 @@
+type TransferError = 
+ variant {
+   BadBurn: record {min_burn_amount: nat;};
+   BadFee: record {expected_fee: nat;};
+   CreatedInFuture: record {ledger_time: nat64;};
+   Duplicate: record {duplicate_of: nat;};
+   GenericError: record {
+                   error_code: nat;
+                   message: text;
+                 };
+   InsufficientFunds: record {balance: nat;};
+   TemporarilyUnavailable;
+   TooOld;
+ };
 type TransferArgs = 
  record {
    amount: nat64;
@@ -19,6 +33,11 @@ type SubcribePrice =
  record {
    price: nat;
    subType: SubcribeType;
+ };
+type Result = 
+ variant {
+   Err: TransferError;
+   Ok: nat;
  };
 type QuerySubcriberResp = 
  record {
@@ -124,6 +143,29 @@ type QueryBlackUserResp =
    hasmore: bool;
    page: nat;
    total: int;
+ };
+type QueryAwardResp = 
+ record {
+   data: vec QueryAward;
+   hasmore: bool;
+   page: nat;
+   total: int;
+ };
+type QueryAwardReq = 
+ record {
+   aid: text;
+   page: nat;
+   size: nat;
+   sort: QuerySort;
+ };
+type QueryAward = 
+ record {
+   aid: text;
+   amount: nat64;
+   created: int;
+   from: principal;
+   id: nat64;
+   token: text;
  };
 type QueryArticleResp = 
  record {
@@ -235,15 +277,21 @@ type Planet =
    canisterBalance: () -> (Tokens);
    canisterMemory: () -> (nat) query;
    canisterTransfer: (TransferArgs) -> (bool);
+   confirmAward: (nat64) -> (bool);
    copyright: (text) -> (bool);
    deleteArticle: (text) -> (bool);
    getPlanetBase: () -> (PlanetBase) query;
    getPlanetInfo: () -> (PlanetInfo) query;
+   getRecoverOwner: () -> (opt principal) query;
    getSelfSubcriber: () -> (QuerySelfSubscriber) query;
+   get_version: () -> (text) query;
+   icrc1_transfer: (ICRCTransferArgs) -> (Result);
    isSubscriber: (principal) -> (QueryCommonSubscriber) query;
+   preAward: (text, text, text) -> (PayResp);
    preSubscribe: (text, SubcribePrice) -> (PayResp);
    queryArticle: (text) -> (QueryDetailResp) query;
    queryArticles: (QueryArticleReq) -> (QueryArticleResp) query;
+   queryAwards: (QueryAwardReq) -> (QueryAwardResp) query;
    queryComments: (QueryCommentReq) -> (QueryCommentResp) query;
    queryOrders: (QueryCommonReq) -> (QueryOrderResp) query;
    refundOrder: (nat64, blob) -> (bool);
@@ -259,6 +307,7 @@ type Planet =
    setLang: (text) -> (bool);
    setName: (text) -> (bool);
    setOwner: (principal) -> (bool);
+   setRecoverOwner: (principal) -> (bool);
    setSubPrices: (vec SubcribePrice) -> (bool);
    setTwitter: (text) -> (bool);
    setWriters: (vec principal) -> (bool);
@@ -283,6 +332,7 @@ type PermissionType =
  };
 type PayType = 
  variant {
+   Award: AwardPrice;
    Price: SubcribePrice;
    Verify: bool;
  };
@@ -293,6 +343,7 @@ type PayStatus =
    Refunded;
    Timeout;
    Unpaid;
+   Verifying;
  };
 type PayResp = 
  variant {
@@ -313,6 +364,13 @@ type OpResult =
    Err: text;
    Ok: record {data: text;};
  };
+type ICRCTransferArgs = 
+ record {
+   amount: nat64;
+   memo: opt blob;
+   to: Account;
+   token: text;
+ };
 type CommentStatus = 
  variant {
    Invisible;
@@ -328,6 +386,7 @@ type BlackUser =
    created: int;
    pid: principal;
  };
+type AwardPrice = record {aid: text;};
 type ArticleType = 
  variant {
    Article;
@@ -369,4 +428,9 @@ type ArticleArgs =
    title: text;
  };
 type AccountIdentifier = blob;
+type Account = 
+ record {
+   owner: principal;
+   subaccount: opt blob;
+ };
 service : (principal, text, text, text, AccountIdentifier) -> Planet

@@ -51,5 +51,10 @@ let additions = [
     , repo = "https://github.com/gekctek/motoko_numbers"
     , dependencies = [] : List Text
   },
+  { name = "icrc1"
+    , version = "2ede9a69a6d9d15802d44dafb5403e767269e27b"
+    , repo = "https://github.com/NatLabs/icrc1"
+    , dependencies = [ "base" ] : List Text
+  },
 ] : List Package
 in  upstream # additions
