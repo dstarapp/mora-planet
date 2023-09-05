@@ -2,6 +2,9 @@ module {
   // local ledger;
   public let LEDGER_CANISTER_ID = "sp3hj-caaaa-aaaaa-aaajq-cai";
 
+  // local ckbtc ledger
+  public let CKBTC_LEDGER_CANISTER_ID = "mxzaz-hqaaa-aaaar-qaada-cai";
+
   // local block search
   public let BLOCK_CANISTER_ID = "su63m-yyaaa-aaaaa-aaala-cai";
 
